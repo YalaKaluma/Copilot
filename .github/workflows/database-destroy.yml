@@ -1,0 +1,27 @@
+name: Destroy Database
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch_name:
+        description: 'Database branch name to destroy (e.g., feature-upload)'
+        required: true
+        type: string
+      confirm:
+        description: 'Check to confirm (this is permanent!)'
+        required: true
+        type: boolean
+        default: false
+
+jobs:
+  destroy:
+    name: Destroy Database Branch
+    if: |
+      github.event.inputs.confirm == 'true' &&
+      github.event.inputs.branch_name != 'main' &&
+      github.event.inputs.branch_name != 'staging'
+    uses: ./.github/workflows/_neon.yml
+    with:
+      action: delete
+      branch_name: ${{ github.event.inputs.branch_name }}
+    secrets: inherit

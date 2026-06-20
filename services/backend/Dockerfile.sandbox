@@ -1,0 +1,8 @@
+# Sandbox executor: Python with pandas/numpy for code execution.
+FROM python:3.12-slim
+
+RUN pip install --no-cache-dir pandas numpy
+
+COPY services/backend/app/services/sandbox_worker.py /runner/sandbox_worker.py
+
+CMD ["python", "/runner/sandbox_worker.py"]

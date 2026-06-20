@@ -1,0 +1,68 @@
+name: Deploy All Services
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: false
+        type: choice
+        options:
+          - auto
+          - dev
+          - staging
+          - prod
+      deploy_gpu_worker:
+        description: 'Deploy GPU Worker (optional, for GPU-accelerated workloads)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  # Create Neon branch for dev environments
+  create-database:
+    name: Create Database Branch
+    if: ${{ github.ref_name != 'main' && github.ref_name != 'staging' }}
+    uses: ./.github/workflows/_neon.yml
+    with:
+      action: create
+      branch_name: ${{ github.ref_name }}
+    secrets: inherit
+
+  # Backend deploys first
+  deploy-backend:
+    name: Deploy Backend
+    needs: [create-database]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/_backend.yml
+    with:
+      branch_name: ${{ github.ref_name }}
+      sha: ${{ github.sha }}
+      database_url: ${{ needs.create-database.outputs.database_url || '' }}
+    secrets: inherit
+
+  deploy-frontend:
+    name: Deploy Frontend
+    needs: [deploy-backend]
+    if: ${{ !cancelled() && needs.deploy-backend.result == 'success' }}
+    uses: ./.github/workflows/_frontend.yml
+    with:
+      branch_name: ${{ github.ref_name }}
+      sha: ${{ github.sha }}
+      backend_url: ${{ needs.deploy-backend.outputs.backend_url }}
+    secrets: inherit
+
+  summary:
+    name: Deployment Summary
+    needs: [deploy-backend, deploy-frontend]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print Summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Status | URL |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend | ${{ needs.deploy-backend.result }} | ${{ needs.deploy-backend.outputs.backend_url || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend | ${{ needs.deploy-frontend.result }} | ${{ needs.deploy-frontend.outputs.frontend_url || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY

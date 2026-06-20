@@ -1,0 +1,404 @@
+name: Backend CI/CD
+
+on:
+  workflow_call:
+    inputs:
+      branch_name:
+        required: true
+        type: string
+      sha:
+        required: true
+        type: string
+      database_url:
+        required: false
+        type: string
+        description: "Dynamic DATABASE_URL for dev branches (from Neon workflow)"
+      image_url:
+        required: false
+        type: string
+        description: "Pre-built image URL (skips build if provided)"
+      sandbox_image_url:
+        required: false
+        type: string
+        description: "Pre-built sandbox image URL (skips sandbox build if provided)"
+      is_destroy:
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      backend_url:
+        description: "The deployed backend service URL"
+        value: ${{ jobs.deploy.outputs.backend_url }}
+
+jobs:
+  build:
+    name: Build Backend Image
+    if: ${{ !inputs.is_destroy && (!inputs.image_url || !inputs.sandbox_image_url) }}
+    runs-on: ubuntu-latest
+    outputs:
+      image_url: ${{ steps.build.outputs.image_url }}
+      sandbox_image_url: ${{ steps.build_sandbox.outputs.sandbox_image_url }}
+      registry_url: ${{ steps.registry.outputs.registry_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GOOGLE_CREDENTIALS }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ vars.REGION || 'asia-southeast1' }}-docker.pkg.dev --quiet
+
+      - name: Determine Registry URL
+        id: registry
+        run: |
+          REGION="${{ vars.REGION || 'asia-southeast1' }}"
+          PROJECT_ID="${{ secrets.GCP_PROJECT_ID }}"
+          APP_NAME="${{ vars.APP_NAME || 'app' }}"
+          ENVIRONMENT="${{ inputs.branch_name == 'main' && 'prod' || inputs.branch_name }}"
+
+          # Sanitize service name (lowercase, replace underscores)
+          SERVICE_NAME=$(echo "${APP_NAME}-backend-${ENVIRONMENT}" | tr '[:upper:]' '[:lower:]' | tr '_' '-')
+
+          # Ensure Artifact Registry repository exists
+          if ! gcloud artifacts repositories describe ${SERVICE_NAME} --location=${REGION} --project=${PROJECT_ID} &>/dev/null; then
+            echo "Creating Artifact Registry repository: ${SERVICE_NAME}"
+            gcloud artifacts repositories create ${SERVICE_NAME} \
+              --repository-format=docker \
+              --location=${REGION} \
+              --project=${PROJECT_ID} \
+              --description="Docker repository for ${SERVICE_NAME}"
+          fi
+
+          REGISTRY_URL="${REGION}-docker.pkg.dev/${PROJECT_ID}/${SERVICE_NAME}"
+          echo "registry_url=${REGISTRY_URL}" >> $GITHUB_OUTPUT
+          echo "Registry URL: ${REGISTRY_URL}"
+
+      - name: Build and Push Docker Image
+        id: build
+        if: ${{ !inputs.image_url }}
+        run: |
+          set -e  # Exit on error
+
+          SERVICE_NAME=$(echo "${{ vars.APP_NAME || 'app' }}-backend-${{ inputs.branch_name == 'main' && 'prod' || inputs.branch_name }}" | tr '[:upper:]' '[:lower:]' | tr '_' '-')
+          IMAGE_URL="${{ steps.registry.outputs.registry_url }}/${SERVICE_NAME}:${{ inputs.sha }}"
+
+          echo "📦 Image URL: ${IMAGE_URL}"
+
+          echo "🔨 Building image..."
+          docker build \
+            -t "${IMAGE_URL}" \
+            -f services/backend/Dockerfile \
+            .
+
+          echo "📤 Pushing image..."
+          docker push "${IMAGE_URL}"
+
+          echo "✅ Image pushed successfully"
+
+          # Save to file for artifact upload
+          echo "${IMAGE_URL}" > image_url.txt
+
+      - name: Build and Push Sandbox Image
+        id: build_sandbox
+        if: ${{ !inputs.sandbox_image_url }}
+        run: |
+          set -e
+
+          SERVICE_NAME=$(echo "${{ vars.APP_NAME || 'app' }}-backend-${{ inputs.branch_name == 'main' && 'prod' || inputs.branch_name }}" | tr '[:upper:]' '[:lower:]' | tr '_' '-')
+          SANDBOX_IMAGE_URL="${{ steps.registry.outputs.registry_url }}/${SERVICE_NAME}-sandbox:${{ inputs.sha }}"
+
+          echo "📦 Sandbox image URL: ${SANDBOX_IMAGE_URL}"
+
+          docker build \
+            -t "${SANDBOX_IMAGE_URL}" \
+            -f services/backend/Dockerfile.sandbox \
+            .
+
+          docker push "${SANDBOX_IMAGE_URL}"
+
+          echo "sandbox_image_url=${SANDBOX_IMAGE_URL}" >> $GITHUB_OUTPUT
+          echo "${SANDBOX_IMAGE_URL}" > sandbox_image_url.txt
+
+      - name: Upload image URL artifact
+        if: ${{ !inputs.image_url }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-image-url
+          path: image_url.txt
+          retention-days: 1
+
+      - name: Upload sandbox image URL artifact
+        if: ${{ !inputs.sandbox_image_url }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-sandbox-image-url
+          path: sandbox_image_url.txt
+          retention-days: 1
+
+  deploy:
+    name: Deploy Backend - ${{ inputs.branch_name }}
+    needs: [build]
+    if: ${{ !cancelled() && (needs.build.result == 'success' || needs.build.result == 'skipped' || inputs.is_destroy) }}
+    runs-on: ubuntu-latest
+
+    outputs:
+      backend_url: ${{ steps.output.outputs.backend_url }}
+
+    environment:
+      name: ${{ inputs.branch_name == 'main' && 'prod' || inputs.branch_name }}
+      url: ${{ steps.output.outputs.backend_url }}
+
+    env:
+      GOOGLE_APPLICATION_CREDENTIALS: gcp.json
+
+      # Terraform variables
+      TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+      TF_VAR_environment: ${{ inputs.branch_name == 'main' && 'prod' || inputs.branch_name }}
+      TF_VAR_app_name: ${{ vars.APP_NAME || 'app' }}
+      TF_VAR_region: ${{ vars.REGION || 'asia-southeast1' }}
+      # TF_VAR_image_url is set from artifact in "Set image URL from artifact" step
+      # TF_VAR_sandbox_image_url is set from artifact in "Set image URLs" step
+
+      # Application configuration
+      TF_VAR_env: ${{ (inputs.branch_name != 'main' && inputs.branch_name != 'staging') && 'development' || vars.ENV || 'production' }}
+      TF_VAR_debug: ${{ vars.DEBUG || 'false' }}
+      TF_VAR_backend_port: ${{ vars.BACKEND_PORT || '8080' }}
+      TF_VAR_log_level: ${{ vars.LOG_LEVEL || 'INFO' }}
+
+      # Secrets
+      TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+      TF_VAR_anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+      TF_VAR_gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+      TF_VAR_skai_api_url: ${{ vars.SKAI_API_URL || secrets.SKAI_API_URL }}
+      TF_VAR_skai_api_key: ${{ secrets.SKAI_API_KEY }}
+      TF_VAR_skai_api_origin: ${{ vars.SKAI_API_ORIGIN || secrets.SKAI_API_ORIGIN }}
+      TF_VAR_skai_api_referer: ${{ vars.SKAI_API_REFERER || secrets.SKAI_API_REFERER }}
+      TF_VAR_skai_api_user_agent: ${{ vars.SKAI_API_USER_AGENT || secrets.SKAI_API_USER_AGENT }}
+      TF_VAR_skai_token_type: ${{ vars.SKAI_TOKEN_TYPE || 'id' }}
+      TF_VAR_skai_token_refresh_margin_seconds: ${{ vars.SKAI_TOKEN_REFRESH_MARGIN_SECONDS || '300' }}
+      TF_VAR_clerk_secret_key: ${{ secrets.CLERK_SECRET_KEY }}
+      TF_VAR_clerk_webhook_secret: ${{ secrets.CLERK_WEBHOOK_SECRET }}
+      TF_VAR_google_service_account_json: ${{ secrets.GOOGLE_CREDENTIALS }}
+      TF_VAR_skai_cognito_region: ${{ vars.SKAI_COGNITO_REGION || secrets.SKAI_COGNITO_REGION }}
+      TF_VAR_skai_cognito_user_pool_id: ${{ vars.SKAI_COGNITO_USER_POOL_ID || secrets.SKAI_COGNITO_USER_POOL_ID }}
+      TF_VAR_skai_cognito_client_id: ${{ vars.SKAI_COGNITO_CLIENT_ID || secrets.SKAI_COGNITO_CLIENT_ID }}
+      TF_VAR_skai_cognito_client_secret: ${{ secrets.SKAI_COGNITO_CLIENT_SECRET }}
+
+      # Langfuse - LLM Observability (optional)
+      TF_VAR_langfuse_public_key: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+      TF_VAR_langfuse_secret_key: ${{ secrets.LANGFUSE_SECRET_KEY }}
+      TF_VAR_langfuse_host: ${{ vars.LANGFUSE_HOST || 'https://cloud.langfuse.com' }}
+      TF_VAR_langfuse_tracing_environment: ${{ inputs.branch_name == 'main' && 'production' || 'staging' }}
+
+      # Infrastructure
+      TF_VAR_cpu_limit: ${{ vars.BACKEND_CPU || '1' }}
+      TF_VAR_memory_limit: ${{ vars.BACKEND_MEMORY || '2Gi' }}
+      TF_VAR_min_instances: ${{ vars.BACKEND_MIN_INSTANCES || '0' }}
+      TF_VAR_max_instances: ${{ vars.BACKEND_MAX_INSTANCES || '10' }}
+      TF_VAR_container_concurrency: ${{ vars.BACKEND_CONCURRENCY || '100' }}
+      TF_VAR_timeout_seconds: ${{ vars.BACKEND_TIMEOUT || '300' }}
+
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: ./terraform/services/backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download image URL artifact
+        if: ${{ !inputs.is_destroy && !inputs.image_url }}
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-image-url
+          path: /tmp
+
+      - name: Download sandbox image URL artifact
+        if: ${{ !inputs.is_destroy && !inputs.sandbox_image_url }}
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-sandbox-image-url
+          path: /tmp
+
+      - name: Set image URLs
+        if: ${{ !inputs.is_destroy }}
+        run: |
+          if [ -n "${{ inputs.image_url }}" ]; then
+            echo "TF_VAR_image_url=${{ inputs.image_url }}" >> $GITHUB_ENV
+            echo "✅ Image URL from input: ${{ inputs.image_url }}"
+          else
+            IMAGE_URL=$(cat /tmp/image_url.txt)
+            echo "TF_VAR_image_url=${IMAGE_URL}" >> $GITHUB_ENV
+            echo "✅ Image URL from artifact: ${IMAGE_URL}"
+          fi
+
+          if [ -n "${{ inputs.sandbox_image_url }}" ]; then
+            echo "TF_VAR_sandbox_image_url=${{ inputs.sandbox_image_url }}" >> $GITHUB_ENV
+            echo "✅ Sandbox image URL from input: ${{ inputs.sandbox_image_url }}"
+          else
+            SANDBOX_IMAGE_URL=$(cat /tmp/sandbox_image_url.txt)
+            echo "TF_VAR_sandbox_image_url=${SANDBOX_IMAGE_URL}" >> $GITHUB_ENV
+            echo "✅ Sandbox image URL from artifact: ${SANDBOX_IMAGE_URL}"
+          fi
+        working-directory: .
+
+      - name: Prepare Database URL
+        run: |
+          echo "Branch: ${{ inputs.branch_name }}"
+
+          if [ -n "${{ inputs.database_url }}" ]; then
+            echo "✅ Using database_url from workflow input"
+            if echo "${{ inputs.database_url }}" | grep -qE '^[A-Za-z0-9+/]+=*$'; then
+              DATABASE_URL=$(echo "${{ inputs.database_url }}" | base64 -d)
+              echo "TF_VAR_database_url=${DATABASE_URL}" >> $GITHUB_ENV
+            else
+              echo "TF_VAR_database_url=${{ inputs.database_url }}" >> $GITHUB_ENV
+            fi
+
+          elif [ "${{ inputs.branch_name }}" = "main" ] || [ "${{ inputs.branch_name }}" = "staging" ]; then
+            echo "✅ Using environment DATABASE_URL for ${{ inputs.branch_name }}"
+            echo "TF_VAR_database_url=${{ secrets.DATABASE_URL }}" >> $GITHUB_ENV
+
+          else
+            echo "ℹ️  Dev branch detected. Will retrieve DATABASE_URL from Terraform state..."
+            echo "RETRIEVE_FROM_STATE=true" >> $GITHUB_ENV
+          fi
+        working-directory: .
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Export GCP credentials
+        run: echo '${{ secrets.GOOGLE_CREDENTIALS }}' > gcp.json
+
+      - name: Terraform Init
+        run: |
+          terraform init -upgrade \
+            -backend-config="bucket=${{ secrets.TFSTATE_BUCKET }}" \
+            -backend-config="prefix=${{ github.event.repository.name }}/services/backend"
+
+      - name: Terraform Workspace
+        run: |
+          WORKSPACE="${{ inputs.branch_name == 'main' && 'prod' || inputs.branch_name }}"
+          terraform workspace select "$WORKSPACE" || terraform workspace new "$WORKSPACE"
+
+      - name: Remove Redis resources from state (no longer used)
+        run: |
+          for addr in $(terraform state list -no-color 2>/dev/null | grep -E '^rediscloud_' || true); do
+            echo "Removing from state: $addr"
+            terraform state rm "$addr" || true
+          done
+
+      - name: Retrieve DATABASE_URL from State (if needed)
+        if: env.RETRIEVE_FROM_STATE == 'true'
+        run: |
+          echo "Retrieving DATABASE_URL from Terraform state..."
+          DATABASE_URL=$(terraform output -raw database_url 2>/dev/null || echo "")
+
+          if [ -n "$DATABASE_URL" ]; then
+            echo "✅ Retrieved DATABASE_URL from Terraform state"
+            echo "TF_VAR_database_url=$DATABASE_URL" >> $GITHUB_ENV
+          else
+            echo "❌ No DATABASE_URL found in Terraform state"
+            echo "Run deploy-all workflow first to create the database branch."
+            exit 1
+          fi
+
+      - name: Validate Image URL
+        if: ${{ !inputs.is_destroy }}
+        run: |
+          if [ -z "$TF_VAR_image_url" ]; then
+            echo "❌ Error: TF_VAR_image_url is empty."
+            echo "The artifact download may have failed."
+            exit 1
+          fi
+          echo "✅ Image URL: $TF_VAR_image_url"
+
+      - name: Terraform Plan
+        if: ${{ !inputs.is_destroy }}
+        run: terraform plan -input=false
+
+      - name: Terraform Apply
+        if: ${{ !inputs.is_destroy }}
+        run: terraform apply -auto-approve -input=false
+
+      - name: Run Migrations
+        if: ${{ !inputs.is_destroy }}
+        run: |
+          REGION="${{ vars.REGION || 'asia-southeast1' }}"
+          PROJECT_ID="${{ secrets.GCP_PROJECT_ID }}"
+
+          gcloud auth activate-service-account --key-file=gcp.json
+          gcloud config set project "$PROJECT_ID"
+
+          MIGRATION_JOB=$(terraform output -raw migration_job_name 2>/dev/null || echo "")
+          if [ -n "$MIGRATION_JOB" ] && [ "$MIGRATION_JOB" != "null" ]; then
+            echo "Running migration job: $MIGRATION_JOB"
+
+            if ! gcloud run jobs execute "$MIGRATION_JOB" \
+              --region "$REGION" \
+              --project "$PROJECT_ID" \
+              --wait; then
+              echo "❌ Migration job failed. Fetching latest execution details..."
+
+              LAST_EXECUTION=$(gcloud run jobs executions list \
+                --job "$MIGRATION_JOB" \
+                --region "$REGION" \
+                --project "$PROJECT_ID" \
+                --sort-by="~createTime" \
+                --limit=1 \
+                --format="value(name)")
+
+              if [ -n "$LAST_EXECUTION" ]; then
+                echo "Latest execution: $LAST_EXECUTION"
+                gcloud run jobs executions describe "$LAST_EXECUTION" \
+                  --region "$REGION" \
+                  --project "$PROJECT_ID" \
+                  --format="yaml(status.conditions,status.failedCount,status.succeededCount,status.logUri)"
+
+                echo "Recent execution logs:"
+                LOG_FILTER="resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"$MIGRATION_JOB\" AND resource.labels.location=\"$REGION\" AND labels.\"run.googleapis.com/execution_name\"=\"$LAST_EXECUTION\""
+                gcloud logging read "$LOG_FILTER" \
+                  --project "$PROJECT_ID" \
+                  --limit=100 \
+                  --order=desc \
+                  --format="table(timestamp,severity,textPayload,jsonPayload.message)" || true
+              else
+                echo "No execution found for job: $MIGRATION_JOB"
+              fi
+              exit 1
+            fi
+
+            echo "✅ Migration job completed"
+          else
+            echo "No migration job configured"
+          fi
+
+      - name: Set output URL
+        if: ${{ !inputs.is_destroy }}
+        id: output
+        run: |
+          BACKEND_URL=$(terraform output -raw backend_url)
+          echo "backend_url=$BACKEND_URL" >> $GITHUB_OUTPUT
+          echo "✅ Backend deployed at: $BACKEND_URL"
+
+      - name: Terraform Destroy
+        if: ${{ inputs.is_destroy }}
+        run: terraform destroy -auto-approve
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f gcp.json
+          rm -f /tmp/gcp-*.json

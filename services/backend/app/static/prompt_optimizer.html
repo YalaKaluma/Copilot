@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prompt Optimizer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f8f9fb;
+      --surface: #ffffff;
+      --border: #e2e6ec;
+      --text: #1a1d24;
+      --text-muted: #5c6370;
+      --accent: #0d7377;
+      --accent-hover: #0a5c5f;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --success-bg: #ecfdf5;
+      --success-text: #065f46;
+      --error-bg: #fef2f2;
+      --error-text: #991b1b;
+      --radius: 10px;
+      --radius-sm: 6px;
+      --shadow: 0 1px 3px rgba(0,0,0,0.06);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+    }
+    body {
+      font-family: "DM Sans", system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--text);
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+    }
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      min-height: 0;
+    }
+    .toolbar {
+      flex-shrink: 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1.25rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1.25rem;
+      align-items: center;
+    }
+    .toolbar-title {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin: 0;
+      margin-right: 0.5rem;
+      color: var(--text);
+    }
+    .toolbar .row {
+      margin: 0;
+      display: inline-flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .toolbar label {
+      font-size: 0.85rem;
+      min-width: 0;
+      margin: 0;
+    }
+    .toolbar input[type="text"],
+    .toolbar select {
+      min-width: 10rem;
+      padding: 0.4rem 0.6rem;
+      font-size: 0.85rem;
+    }
+    .toolbar .btn { padding: 0.4rem 0.75rem; font-size: 0.85rem; }
+    .toolbar .message {
+      margin: 0 0 0 0.5rem;
+      padding: 0.4rem 0.75rem;
+      font-size: 0.85rem;
+    }
+    .actions-bar {
+      flex-shrink: 0;
+      background: #f1f3f5;
+      border-bottom: 1px solid var(--border);
+      padding: 0.5rem 1.25rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem 1.25rem;
+      align-items: center;
+      font-size: 0.85rem;
+    }
+    .actions-bar .row { margin: 0; display: inline-flex; gap: 0.5rem; align-items: center; }
+    .actions-bar label { font-size: 0.85rem; min-width: 0; }
+    .actions-bar input[type="text"] { min-width: 10rem; padding: 0.4rem 0.6rem; font-size: 0.85rem; }
+    .actions-bar .btn { padding: 0.4rem 0.75rem; font-size: 0.85rem; }
+    .actions-bar .hint { margin: 0; font-size: 0.8rem; }
+    .editor-pane {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 0.75rem 1.25rem;
+    }
+    .editor-pane textarea {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      font-family: ui-monospace, "SF Mono", Monaco, monospace;
+      font-size: 14px;
+      line-height: 1.55;
+      padding: 1rem;
+      color: var(--text);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      resize: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .editor-pane textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(13, 115, 119, 0.12);
+    }
+    .editor-pane textarea:disabled {
+      background: #f1f3f5;
+      color: var(--text-muted);
+      cursor: not-allowed;
+    }
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      padding: 1.5rem 1.75rem;
+      margin-bottom: 1.25rem;
+    }
+    .card h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin: 0 0 0.5rem 0;
+      color: var(--text);
+    }
+    .card p {
+      margin: 0 0 1rem 0;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+    .card p:last-of-type { margin-bottom: 0; }
+    .row {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    .row:last-child { margin-bottom: 0; }
+    label {
+      font-weight: 500;
+      color: var(--text);
+      min-width: 10rem;
+      font-size: 0.9rem;
+    }
+    input[type="text"],
+    select {
+      min-width: 14rem;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.9rem;
+      font-family: inherit;
+      color: var(--text);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    input[type="text"]:focus,
+    select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(13, 115, 119, 0.12);
+    }
+    input[type="text"]::placeholder {
+      color: #9ca3af;
+    }
+    select:disabled { opacity: 0.7; cursor: not-allowed; }
+    .btn {
+      padding: 0.5rem 1rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      font-family: inherit;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      border: none;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+    }
+    .btn-accent {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-accent:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+    .message {
+      margin-top: 0.75rem;
+      padding: 0.65rem 1rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.9rem;
+      display: block;
+    }
+    .message.success {
+      background: var(--success-bg);
+      color: var(--success-text);
+      border: 1px solid #a7f3d0;
+    }
+    .message.error {
+      background: var(--error-bg);
+      color: var(--error-text);
+      border: 1px solid #fecaca;
+    }
+    .hint {
+      margin: 0.5rem 0 0 0;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="toolbar">
+      <h1 class="toolbar-title">Prompt Optimizer</h1>
+      <div class="row">
+        <label for="promptVersionName">New prompt version identifier</label>
+        <input type="text" id="promptVersionName" placeholder="e.g. v1-modified" title="Identifier for saved prompt files; use the same when saving the Skai version." />
+      </div>
+      <div class="row">
+        <label for="version">Base Skai version</label>
+        <select id="version">
+          <option value="">Loading…</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="prompt">Prompt</label>
+        <select id="prompt" disabled>
+          <option value="">Select a base Skai version first</option>
+        </select>
+      </div>
+      <button type="button" id="savePromptBtn" class="btn btn-primary" disabled style="display: none;">Save prompt</button>
+      <span id="message" class="message" style="display: none;"></span>
+    </div>
+
+    <div class="actions-bar">
+      <div class="row">
+        <label for="newVersionId">New Skai version</label>
+        <input type="text" id="newVersionId" placeholder="e.g. v2 or v1-modified" />
+        <button type="button" id="saveVersionBtn" class="btn btn-primary" disabled>Save Skai version</button>
+      </div>
+      <div class="row">
+        <label for="experimentVersionId">Version to run</label>
+        <input type="text" id="experimentVersionId" placeholder="e.g. v1-modified" title="Use the same name as New Skai version after saving." />
+        <button type="button" id="experimentBtn" class="btn btn-accent" disabled>Run experiment</button>
+      </div>
+      <span id="experimentMessage" class="message" style="display: none;"></span>
+    </div>
+
+    <div class="editor-pane">
+      <textarea id="content" placeholder="Select a prompt to edit…" disabled></textarea>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const base = window.location.pathname.replace(/\/?$/, '');
+      const versionSelect = document.getElementById('version');
+      const promptSelect = document.getElementById('prompt');
+      const contentEl = document.getElementById('content');
+      const savePromptBtn = document.getElementById('savePromptBtn');
+      const saveVersionBtn = document.getElementById('saveVersionBtn');
+      const newVersionIdEl = document.getElementById('newVersionId');
+      const promptVersionNameEl = document.getElementById('promptVersionName');
+      const messageEl = document.getElementById('message');
+      const experimentBtn = document.getElementById('experimentBtn');
+      const experimentVersionIdEl = document.getElementById('experimentVersionId');
+      const experimentMessageEl = document.getElementById('experimentMessage');
+
+      let promptKeys = [];
+      let originalContent = {};
+      let currentVersionId = '';
+      let currentPromptKey = '';
+
+      function showMessage(text, isError) {
+        messageEl.textContent = text;
+        messageEl.className = 'message ' + (isError ? 'error' : 'success');
+        messageEl.style.display = 'block';
+      }
+      function hideMessage() {
+        messageEl.style.display = 'none';
+      }
+
+      function isCurrentPromptModified() {
+        if (!currentPromptKey || originalContent[currentPromptKey] === undefined) return false;
+        return contentEl.value !== originalContent[currentPromptKey];
+      }
+
+      function updateSavePromptButton() {
+        if (isCurrentPromptModified()) {
+          savePromptBtn.style.display = '';
+          savePromptBtn.disabled = false;
+        } else {
+          savePromptBtn.style.display = 'none';
+          savePromptBtn.disabled = true;
+        }
+      }
+
+      async function api(path, options = {}) {
+        const url = base + path;
+        const res = await fetch(url, {
+          ...options,
+          headers: { 'Content-Type': 'application/json', ...options.headers },
+        });
+        if (!res.ok) {
+          const t = await res.text();
+          throw new Error(t || res.statusText);
+        }
+        if (res.headers.get('content-type')?.includes('application/json')) return res.json();
+        return res.text();
+      }
+
+      async function loadVersions() {
+        const data = await api('/versions');
+        versionSelect.innerHTML = '<option value="">— Select version —</option>';
+        (data.versionIds || []).forEach(function (id) {
+          const opt = document.createElement('option');
+          opt.value = id;
+          opt.textContent = id;
+          versionSelect.appendChild(opt);
+        });
+      }
+
+      async function loadVersionConfig(versionId) {
+        const data = await api('/versions/' + encodeURIComponent(versionId));
+        promptKeys = data.promptKeys || [];
+        promptSelect.innerHTML = '<option value="">— Select prompt —</option>';
+        promptKeys.forEach(function (key) {
+          const opt = document.createElement('option');
+          opt.value = key;
+          opt.textContent = key;
+          promptSelect.appendChild(opt);
+        });
+        promptSelect.disabled = false;
+        contentEl.disabled = true;
+        contentEl.value = '';
+        originalContent = {};
+        currentPromptKey = '';
+        savePromptBtn.style.display = 'none';
+        savePromptBtn.disabled = true;
+        saveVersionBtn.disabled = !versionId;
+        if (newVersionIdEl) newVersionIdEl.value = '';
+        updateExperimentButton();
+      }
+
+      function updateExperimentButton() {
+        const v = (experimentVersionIdEl && experimentVersionIdEl.value) ? experimentVersionIdEl.value.trim() : '';
+        experimentBtn.disabled = !v;
+      }
+
+      async function loadPromptContent(versionId, key) {
+        const text = await api('/versions/' + encodeURIComponent(versionId) + '/prompts/' + encodeURIComponent(key));
+        originalContent[key] = text;
+        contentEl.value = text;
+        contentEl.disabled = false;
+        updateSavePromptButton();
+      }
+
+      versionSelect.addEventListener('change', function () {
+        const id = this.value;
+        currentVersionId = id;
+        if (!id) {
+          promptSelect.innerHTML = '<option value="">Select a base Skai version first</option>';
+          promptSelect.disabled = true;
+          contentEl.value = '';
+          contentEl.disabled = true;
+          savePromptBtn.style.display = 'none';
+          saveVersionBtn.disabled = true;
+          return;
+        }
+        hideMessage();
+        saveVersionBtn.disabled = !id;
+        loadVersionConfig(id).catch(function (e) {
+          showMessage(e.message || 'Failed to load version', true);
+        });
+      });
+
+      promptSelect.addEventListener('change', function () {
+        const key = this.value;
+        currentPromptKey = key;
+        if (!key || !currentVersionId) {
+          contentEl.value = '';
+          contentEl.disabled = true;
+          savePromptBtn.style.display = 'none';
+          return;
+        }
+        hideMessage();
+        loadPromptContent(currentVersionId, key).catch(function (e) {
+          showMessage(e.message || 'Failed to load prompt', true);
+        });
+      });
+
+      contentEl.addEventListener('input', function () {
+        updateSavePromptButton();
+      });
+
+      savePromptBtn.addEventListener('click', function () {
+        const pv = (promptVersionNameEl && promptVersionNameEl.value) ? promptVersionNameEl.value.trim() : '';
+        if (!currentVersionId || !currentPromptKey || currentVersionId === 'temp') return;
+        if (!pv) {
+          showMessage('Enter a new prompt version identifier (e.g. v1-modified) first.', true);
+          return;
+        }
+        savePromptBtn.disabled = true;
+        hideMessage();
+        api('/versions/' + encodeURIComponent(currentVersionId) + '/prompts/' + encodeURIComponent(currentPromptKey) + '/save', {
+          method: 'POST',
+          body: JSON.stringify({ content: contentEl.value, prompt_version: pv }),
+        })
+          .then(function () {
+            originalContent[currentPromptKey] = contentEl.value;
+            updateSavePromptButton();
+            showMessage('Prompt "' + currentPromptKey + '" saved under "' + pv + '".', false);
+          })
+          .catch(function (e) {
+            showMessage(e.message || 'Save failed', true);
+            updateSavePromptButton();
+          });
+      });
+
+      saveVersionBtn.addEventListener('click', function () {
+        const newId = (newVersionIdEl && newVersionIdEl.value) ? newVersionIdEl.value.trim() : '';
+        const pv = (promptVersionNameEl && promptVersionNameEl.value) ? promptVersionNameEl.value.trim() : '';
+        if (!currentVersionId) return;
+        if (!newId) {
+          showMessage('Enter a new Skai version name (e.g. v2 or v1-modified).', true);
+          return;
+        }
+        if (!pv) {
+          showMessage('Enter the same new prompt version identifier you used when saving prompts.', true);
+          return;
+        }
+        saveVersionBtn.disabled = true;
+        hideMessage();
+        api('/versions/' + encodeURIComponent(currentVersionId) + '/save-new-version', {
+          method: 'POST',
+          body: JSON.stringify({ new_version_id: newId, prompt_version: pv }),
+        })
+          .then(function (data) {
+            const savedId = data.versionId || newId;
+            showMessage('New version saved: ' + savedId + ' in config/versions', false);
+            if (experimentVersionIdEl) experimentVersionIdEl.value = savedId;
+            updateExperimentButton();
+            experimentMessageEl.style.display = 'none';
+            loadVersions().then(function () {
+              versionSelect.value = savedId;
+              if (savedId) loadVersionConfig(savedId).catch(function () {});
+            }).catch(function () {});
+          })
+          .catch(function (e) {
+            showMessage(e.message || 'Save failed', true);
+          })
+          .finally(function () {
+            saveVersionBtn.disabled = false;
+          });
+      });
+
+      if (experimentVersionIdEl) experimentVersionIdEl.addEventListener('input', updateExperimentButton);
+
+      experimentBtn.addEventListener('click', function () {
+        const systemVersion = (experimentVersionIdEl && experimentVersionIdEl.value) ? experimentVersionIdEl.value.trim() : '';
+        if (!systemVersion) {
+          showMessage('Enter the version to run (e.g. the Skai version you saved).', true);
+          return;
+        }
+        experimentMessageEl.style.display = 'none';
+        experimentBtn.disabled = true;
+        experimentBtn.textContent = 'Running…';
+        api('/experiment', {
+          method: 'POST',
+          body: JSON.stringify({
+            system_version: systemVersion,
+            dataset_name: 'archetype1-descriptive',
+            mode: 'langfuse',
+            limit: 10,
+          }),
+        })
+          .then(function (data) {
+            experimentMessageEl.textContent = 'Experiment started. Run: ' + (data.runName || systemVersion) + ' (version: ' + (data.systemVersion || systemVersion) + '). Check Langfuse for results.';
+            experimentMessageEl.className = 'message success';
+            experimentMessageEl.style.display = 'block';
+          })
+          .catch(function (e) {
+            experimentMessageEl.textContent = e.message || 'Experiment failed';
+            experimentMessageEl.className = 'message error';
+            experimentMessageEl.style.display = 'block';
+          })
+          .finally(function () {
+            experimentBtn.disabled = false;
+            experimentBtn.textContent = 'Run experiment';
+            updateExperimentButton();
+          });
+      });
+
+      loadVersions().catch(function (e) {
+        versionSelect.innerHTML = '<option value="">Error loading versions</option>';
+        showMessage(e.message || 'Failed to load versions', true);
+      });
+    })();
+  </script>
+</body>
+</html>

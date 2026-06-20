@@ -1,0 +1,43 @@
+# Pre-commit hooks for backend Python: trailing whitespace, black, ruff, mypy.
+# Install: pre-commit install (requires pre-commit: pip install pre-commit or brew install pre-commit)
+# Run manually: pre-commit run --all-files
+
+repos:
+  # General hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        name: Trim trailing whitespace
+        args: [--markdown-linebreak-ext=md]
+        files: ^(services/backend/|packages/).*\.(py|md|txt|yml|yaml|toml)$
+      - id: end-of-file-fixer
+        files: ^(services/backend/|packages/|services/worker/).*
+
+  # Black (formatting) – backend and shared Python only
+  - repo: https://github.com/psf/black
+    rev: 26.1.0
+    hooks:
+      - id: black
+        name: black
+        files: ^(services/backend/|packages/).*\.py$
+
+  # Ruff (lint)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.10
+    hooks:
+      - id: ruff
+        name: ruff
+        files: ^(services/backend/|packages/).*\.py$
+        args: [--fix]
+
+  # Mypy (type check) – changed files only; paths stripped to app-relative in script
+  - repo: local
+    hooks:
+      - id: mypy-backend
+        name: mypy (backend)
+        entry: bash
+        args: [services/backend/app/scripts/precommit_mypy.sh]
+        language: system
+        pass_filenames: true
+        files: ^services/backend/app/.*\.py$

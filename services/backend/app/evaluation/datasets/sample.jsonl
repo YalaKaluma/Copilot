@@ -1,0 +1,2 @@
+{"id": "sample-1", "input": "What categories are available for analysis?", "chat_history": [], "expected_output": "Categories typically include product categories, subcategories, and brands. Use the SKAI filters to see available options.", "metadata": {"source": "sample"}}
+{"id": "sample-2", "input": "Show me top retailers by sales.", "chat_history": [], "expected_output": "Retailer performance can be viewed in the retailer or channel landscape views.", "metadata": {"source": "sample"}}

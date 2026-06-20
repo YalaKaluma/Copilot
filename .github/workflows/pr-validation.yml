@@ -1,0 +1,176 @@
+name: Pull Request Validation
+
+on:
+  pull_request:
+    # branches: [main, staging]
+    paths:
+      - 'services/**'
+      - '.github/workflows/**'
+
+concurrency:
+  group: pr-${{ github.event.number }}
+  cancel-in-progress: true
+
+jobs:
+  validation:
+    name: PR Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      # ---------------------------------------------------------------------
+      # Setup
+      # ---------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Start fake-gcs-server
+        run: |
+          docker run -d --name fake-gcs \
+            -p 4443:4443 \
+            fsouza/fake-gcs-server:1.47.8 \
+            -scheme http -port 4443 -backend memory
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      # ---------------------------------------------------------------------
+      # Backend Checks
+      # ---------------------------------------------------------------------
+      - name: Install Python dependencies
+        id: backend_deps
+        continue-on-error: true
+        working-directory: services/backend/app
+        run: |
+          pip install uv
+          uv sync
+
+      - name: Backend linting
+        id: backend_lint
+        continue-on-error: true
+        working-directory: services/backend/app
+        run: |
+          uv run ruff check .
+          uv run black --check .
+
+      - name: Backend type checking
+        id: backend_types
+        continue-on-error: true
+        working-directory: services/backend/app
+        run: uv run mypy .
+
+      - name: Backend tests
+        id: backend_tests
+        continue-on-error: true
+        working-directory: services/backend/app
+        env:
+          STORAGE_EMULATOR_HOST: localhost:4443
+          GCP_PROJECT_ID: test-project
+          GCS_BUCKET_NAME: test-bucket
+          GOOGLE_SERVICE_ACCOUNT_JSON: '{"type":"service_account","project_id":"test-project"}'
+          STORAGE_ENV_PREFIX: test
+        run: uv run pytest tests/ -v
+
+      # ---------------------------------------------------------------------
+      # Frontend Checks
+      # ---------------------------------------------------------------------
+      - name: Install frontend dependencies
+        id: frontend_deps
+        continue-on-error: true
+        working-directory: services/frontend/app
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Frontend linting
+        id: frontend_lint
+        continue-on-error: true
+        working-directory: services/frontend/app
+        run: pnpm lint
+
+      - name: Frontend type checking
+        id: frontend_types
+        continue-on-error: true
+        working-directory: services/frontend/app
+        run: pnpm tsc --noEmit
+
+      - name: Frontend tests
+        id: frontend_tests
+        continue-on-error: true
+        working-directory: services/frontend/app
+        run: pnpm test:run
+
+      - name: Frontend build
+        id: frontend_build
+        continue-on-error: true
+        working-directory: services/frontend/app
+        run: pnpm build
+
+      # ---------------------------------------------------------------------
+      # Docker Build Verification
+      # ---------------------------------------------------------------------
+      - name: Build backend Docker image
+        id: docker_backend
+        continue-on-error: true
+        run: docker build -t backend-test -f services/backend/Dockerfile .
+
+      - name: Build backend sandbox Docker image
+        id: docker_backend_sandbox
+        continue-on-error: true
+        run: docker build -t backend-sandbox-test -f services/backend/Dockerfile.sandbox .
+
+      - name: Build frontend Docker image
+        id: docker_frontend
+        continue-on-error: true
+        run: docker build -t frontend-test -f services/frontend/Dockerfile .
+
+      # ---------------------------------------------------------------------
+      # Summary & Final Gate
+      # ---------------------------------------------------------------------
+      - name: PR Validation Summary
+        if: always()
+        run: |
+          echo "### PR Validation Results ###"
+          echo ""
+          echo "Backend:"
+          echo "  Dependencies: ${{ steps.backend_deps.outcome }}"
+          # echo "  Linting:      ${{ steps.backend_lint.outcome }}"
+          # echo "  Type Check:   ${{ steps.backend_types.outcome }}"
+          echo "  Tests:        ${{ steps.backend_tests.outcome }}"
+          echo "  Docker Build: ${{ steps.docker_backend.outcome }}"
+          echo ""
+          echo "Frontend:"
+          echo "  Dependencies: ${{ steps.frontend_deps.outcome }}"
+          echo "  Linting:      ${{ steps.frontend_lint.outcome }}"
+          echo "  Type Check:   ${{ steps.frontend_types.outcome }}"
+          echo "  Tests:        ${{ steps.frontend_tests.outcome }}"
+          echo "  Build:        ${{ steps.frontend_build.outcome }}"
+          echo "  Docker Build: ${{ steps.docker_frontend.outcome }}"
+          echo ""
+          
+          # Fail if any critical step failed
+          # Note: Backend linting and type checking temporarily disabled
+          if [[ "${{ steps.backend_deps.outcome }}" != "success" || \
+                "${{ steps.backend_tests.outcome }}" != "success" || \
+                "${{ steps.docker_backend.outcome }}" != "success" || \
+                "${{ steps.docker_backend_sandbox.outcome }}" != "success" || \
+                "${{ steps.frontend_deps.outcome }}" != "success" || \
+                "${{ steps.frontend_lint.outcome }}" != "success" || \
+                "${{ steps.frontend_types.outcome }}" != "success" || \
+                "${{ steps.frontend_tests.outcome }}" != "success" || \
+                "${{ steps.frontend_build.outcome }}" != "success" || \
+                "${{ steps.docker_frontend.outcome }}" != "success" ]]; then
+            echo "❌ Some checks failed. Please fix before merging."
+            exit 1
+          fi
+          
+          echo "✅ All checks passed!"

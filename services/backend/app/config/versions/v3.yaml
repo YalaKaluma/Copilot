@@ -1,0 +1,39 @@
+# Skai Copilot version v3
+version: "v3"
+execution_agents:
+  - domain: category
+    name: category_agent
+    description: "Can handle questions about category share, growth, or who is gaining share; price tiers and tier mix; pack sizes; seasonality or when the category peaks; innovation and discontinuation; category landscape and premiumization."
+    prompt_id: category_agent:v2
+    tools: null
+  - domain: channel
+    name: channel_agent
+    description: "Can handle questions about which channel or retailer is driving growth; distribution, assortment, or velocity; promo intensity or transparency by channel/retailer/SKU; fair share; under-distribution or where we are under-represented."
+    prompt_id: channel_agent:v2
+    tools: null
+  - domain: promo
+    name: promo_agent
+    description: "Can handle questions about promo calendar or when promos run; investment trends, ROI, or promo spend; heatmap, event scatter, or tactic/market effectiveness; baseline erosion or baseline review; promo planner or which promos to run."
+    prompt_id: promo_agent:v2
+    tools: null
+  - domain: margin
+    name: margin_agent
+    description: "Can handle questions about net/B2B price spread, pricing evolution, or price outliers; gross-to-net (GTN) waterfall; investment drivers; profit pool, customer contribution, or portfolio quadrant."
+    prompt_id: margin_agent:v2
+    tools: null
+  - domain: pricing_data
+    name: pricing_data_agent
+    description: "Can handle questions about pricing data, including brand ladder, price-pack curve, and simulator base data."
+    prompt_id: pricing_data_agent:v1
+    tools: null
+  - domain: pricing_simulation
+    name: pricing_simulation_agent
+    description: "Can handle questions about pricing simulation, including running simulations, listing scenarios, creating scenarios, getting scenarios, deleting scenarios, building CDT, and getting elasticities."
+    prompt_id: pricing_simulation_agent:v1
+    tools: null
+model:
+  model_id: "gpt-5.2"
+prompts:
+  base: base:v4
+  orchestrator: orchestrator:v6
+  report_generation: report-generation:v1

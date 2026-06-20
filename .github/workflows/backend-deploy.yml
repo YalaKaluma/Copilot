@@ -1,0 +1,25 @@
+name: Deploy Backend
+
+# Note: For full deployment with Redis, use deploy-all.yml
+# Standalone backend deploys will look up Redis URL from worker state,
+# otherwise job features (background tasks, SSE progress) will be unavailable.
+
+on:
+  push:
+    branches: [main, staging]
+    paths:
+      - 'services/backend/**'
+      - 'packages/db/**'
+      - 'terraform/services/backend/**'
+      - 'terraform/modules/**'
+      - '.github/workflows/_backend.yml'
+      - '.github/workflows/backend-deploy.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/_backend.yml
+    with:
+      branch_name: ${{ github.ref_name }}
+      sha: ${{ github.sha }}
+    secrets: inherit

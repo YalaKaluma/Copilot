@@ -1,0 +1,37 @@
+# Skai Copilot version v2
+# Aligned with AI prompts PDF: RGM base prompt, mandatory thinking loop,
+# filter step, hand_back, common parameters, approach template, empty results handling,
+# and agent-specific intros/question types.
+version: "v2"
+execution_agents:
+  - domain: category
+    name: category_agent
+    description: "Delegate to the Category Analytics agent. Handles: category landscape, price tiers, pack size ranges, seasonality, innovation & discontinuation. Tools: {tools}"
+    prompt_id: category_agent:v2
+    tools: null
+  - domain: channel
+    name: channel_agent
+    description: "Delegate to the Channel Analytics agent. Handles: channel landscape & growth, retailer performance, promo transparency/intensity/fair share, assortment. Tools: {tools}"
+    prompt_id: channel_agent:v2
+    tools: null
+  - domain: pricing
+    name: pricing_agent
+    description: "Delegate to the Pricing Analytics agent. Handles: brand ladder, price-pack curve, pricing simulator (volume/sales/margin impact). Tools: {tools}"
+    prompt_id: pricing_agent:v2
+    tools: null
+  - domain: promo
+    name: promo_agent
+    description: "Delegate to the Promo Analytics agent. Handles: promo calendar, investment trends & ROI, heatmap, event scatter, market/tactic effectiveness, baseline review, promo planner. Tools: {tools}"
+    prompt_id: promo_agent:v2
+    tools: null
+  - domain: margin
+    name: margin_agent
+    description: "Delegate to the Margin & Trade Analytics agent. Handles: price spread, pricing evolution, outliers, gtn waterfall, investment drivers, profit pool, customer contribution, portfolio quadrant. Tools: {tools}"
+    prompt_id: margin_agent:v2
+    tools: null
+model:
+  model_id: "gpt-5.2"
+prompts:
+  base: base:v4
+  orchestrator: orchestrator:v3
+  report_generation: report-generation:v1

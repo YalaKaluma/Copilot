@@ -1,0 +1,1 @@
+"""Copilot-specific models."""

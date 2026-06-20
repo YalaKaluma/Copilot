@@ -1,0 +1,198 @@
+# Skai Copilot version v3
+version: "v4"
+execution_agents:
+  - domain: category
+    name: category_agent
+    description: "Can handle questions about category share, growth, or who is gaining share; price tiers and tier mix; pack sizes; seasonality or when the category peaks; innovation and discontinuation; category landscape and premiumization."
+    prompt_id: category_agent:v3
+    tools: null
+  - domain: channel
+    name: channel_agent
+    description: "Can handle questions about which channel or retailer is driving growth; distribution, assortment, or velocity; promo intensity or transparency by channel/retailer/SKU; fair share; under-distribution or where we are under-represented."
+    prompt_id: channel_agent:v3
+    tools: null
+  - domain: promo
+    name: promo_agent
+    description: "Can handle questions about promo calendar or when promos run; investment trends, ROI, or promo spend; heatmap, event scatter, or tactic/market effectiveness; baseline erosion or baseline review; promo planner or which promos to run."
+    prompt_id: promo_agent:v4
+    tools: null
+  - domain: margin
+    name: margin_agent
+    description: "Can handle questions about net/B2B price spread, pricing evolution, or price outliers; gross-to-net (GTN) waterfall; investment drivers; profit pool, customer contribution, or portfolio quadrant."
+    prompt_id: margin_agent:v3
+    tools: null
+  - domain: pricing_data
+    name: pricing_data_agent
+    description: "Can handle questions about pricing data, including brand ladder, and price-pack curve data."
+    prompt_id: pricing_data_agent:v2
+    tools: null
+  - domain: pricing_simulation
+    name: pricing_simulation_agent
+    description: "Can handle questions about pricing simulation, including finding simulator base data, running simulations, listing scenarios, creating scenarios, getting scenarios, deleting scenarios, building CDT, and getting elasticities."
+    prompt_id: pricing_simulation_agent:v2
+    tools: null
+model:
+  model_id: "gpt-5.2"
+prompts:
+  base: base:v4
+  orchestrator: orchestrator:v7
+  report_generation: report-generation:v1
+  intent_classifier: intent-classification-system:v1
+orchestrator_version: v2
+
+# Question archetypes (1–6) per Copilot Guidance on Consulting Projects.
+# Enabler ask policy: max 3 questions; ask in order objective → scope → guardrails.
+# If user refuses or is unsure: proceed with defaults and flag assumptions clearly.
+archetype_config:
+  # A1: Descriptive/KPI — "what is", "show me", "trend", "vs last period"
+  A1:
+    scoping_framework: |-
+      - Mandatory enablers: scope (market/country, channel, retailer, category, brand, granularity) and time range.
+      - Goal is optional; do not over-ask for descriptive questions.
+      - Ask at most 1 clarifying questions (e.g. period, category/brand) if not inferrable from context.
+      - Defaults when missing: time range = last complete period; scope = default scope dimension values.
+      - Never jump to analysis without at least scope and time range; state "Assumptions used" when using defaults.
+
+    planning_framework: |-
+      - Bounded analysis: 1–2 KPIs plus basic comparison (e.g. vs last period, vs benchmark).
+      - Generate trends over time and period-comparison charts only when they directly support the answer.
+      - Match depth to question: do not over-analyze; stop when the question is answered.
+
+    response_format: |-
+      - Main Rule: answer the user's question directly with shortest answer possible.
+      - Answer headline (one sentence) directly answering the user's question.
+      - What you looked at: filters, period, data sources.
+      - Key findings: 2–5 bullets; each finding must cite KPI value/trend and segmentation (e.g. retailer/channel) and comparison baseline.
+      - No recommendation section (descriptive only).
+      - Assumptions & risks if defaults were used.
+      - Optional: next questions / follow-ups.
+
+    promo_analysis_framework: |-
+      Descriptive (A1): Intent—understand current promo situation. Examples: "How much of our volume is sold on promotion?"; "What promo mechanisms do we use most?" Analysis path: Pull promo intensity, depth, mechanism and frequency. Compare vs prior period or peers. Output: Facts only, no recommendations. Failure mode to avoid: Interpreting intensity or depth as effectiveness.
+
+  # A2: Diagnostic — "why", "drivers", "explain decline/increase"
+  A2:
+    scoping_framework: |-
+      - Mandatory enablers: scope, time range, and "what changed" (the metric or outcome to explain).
+      - Goal optional; limit clarifying questions to what is needed to identify drivers.
+      - Ask at most 2 questions in order: objective (if relevant) → scope → time range / what changed.
+      - Defaults: time range = last complete period; scope = default scope dimension values; state "Assumptions used" when using defaults.
+
+    planning_framework: |-
+      - Bounded analysis: 2–4 drivers for the change the user is asking about.
+      - Generate charts only when differences between drivers are clear and support the explanation.
+      - Do not present correlation as causation without explicit evidence or experimental support.
+      - Stop when the "why" is answered to the depth required; avoid endless diagnostic loops.
+
+    response_format: |-
+      - Main rule: answer the user's question directly with shortest answer possible.
+      - Answer headline (one sentence) stating the main explanation.
+      - What you looked at: filters, period, data sources.
+      - Key findings: 2–5 bullets; top drivers and their impact on the metric; each finding must cite evidence (KPI, segment, chart).
+      - No recommendation section (diagnostic only).
+      - Assumptions & risks; confidence (high/medium/low) if data quality varies.
+      - Optional: next questions / follow-ups.
+
+    promo_analysis_framework: |-
+      Diagnostic (A2): Intent—explain performance. Examples: "Why is promo ROI lower in Retailer X?"; "Why did promo performance drop?" Baseline checks: ROI vs depth; Funding share; Seasonality. Conditional: Cannibalization indicators; Promo overlap / frequency. Output: 2–4 drivers, explicitly non-causal unless modelled. Failure mode: Do not mistake correlation with causation; be careful when phrasing the output.
+
+  # A3: Opportunity — "where can I", "biggest opportunities", "underperforming"
+  A3:
+    scoping_framework: |-
+      - Mandatory enablers: scope and objective metric (what "opportunity" means: profit, volume, share, etc.).
+      - Guardrails/constraints recommended; ask if materially affects ranking (e.g. no-go retailers, budget).
+      - Ask at most 3 questions in order: objective → scope → guardrails.
+      - Defaults: objective = profit/ROI or topic-dependent "best"; scope = default scope dimension values; guardrails = "no explicit constraints given". State "Assumptions used".
+
+    planning_framework: |-
+      - Define the opportunity unit explicitly (e.g. SKU × Retailer × Period, Brand × Channel × Quarter).
+      - Bounded analysis: 3–6 opportunity candidates, ranked.
+      - Rank by: value (expected impact), feasibility (constraints, operational realism), confidence (data quality, sample size, stability).
+      - Do not output opportunities without explaining ranking logic (rule-based or weighted score; document defaults).
+      - Generate charts with ranked opportunity bars where helpful.
+
+    response_format: |-
+      - Answer headline (one sentence) summarizing the main opportunity or shortlist.
+      - What you looked at: filters, period, data sources, opportunity unit and ranking logic.
+      - Key findings: 2–5 bullets; value, feasibility, confidence per finding; cite evidence.
+      - Optional short recommendation (e.g. "prioritise top 3"); keep insight → implication → action → expected impact → risks.
+      - Assumptions & risks; confidence language (high/medium/low).
+      - Optional: next questions / follow-ups.
+
+    promo_analysis_framework: |-
+      Opportunity (A3): Intent—where to do more / less. Examples: "Where are we underinvesting in promo?"; "Which promo setups perform best?" Opportunity unit: Brand × Retailer × Mechanism × Season × Depth. Scoring: Value (ROI or profit), Feasibility (constraints), Confidence (data quality). Output: Ranked shortlist (max 5). Failure mode: Take market (segment) size into account (e.g. small subcategory with great ROI but low potential to expand).
+
+  # A4: Objective-driven — "how do we achieve +X%", "improve by Y bps"
+  A4:
+    scoping_framework: |-
+      - Mandatory enablers: objective (target metric and target value), scope, and guardrails (budget, pricing corridor, contracts, no-go zones).
+      - Time range recommended; ask if needed for the plan.
+      - Ask at most 3 questions in order: objective → scope → guardrails.
+      - Defaults: time range = last complete period; scope = default scope dimension values; guardrails = "no explicit constraints given". State "Assumptions used".
+
+    planning_framework: |-
+      - Bounded analysis: 3–5 RGM lever options tied to target and constraints; structured plan.
+      - Generate charts only when they improve understanding of levers vs target.
+      - Check trade-offs relevant to the question; do not overfit to a single metric.
+      - Stop when the plan is actionable; escalate to "needs deeper work / scenario mode" if high-stakes and data sparse.
+
+    response_format: |-
+      - Answer headline (one sentence) stating the recommended path to the target.
+      - What you looked at: filters, period, data sources, target and constraints.
+      - Key findings: 2–5 bullets; insight → implication → levers/options.
+      - Recommendation / next action: clear, defensible, actionable steps.
+      - Expected impact (directional if needed); state assumptions and risks.
+      - Assumptions & risks; confidence (high/medium/low).
+      - Optional: next questions / follow-ups.
+
+    promo_analysis_framework: |-
+      Objective-driven (A4): Intent—achieve a target. Examples: "How can we improve promo ROI by +5pp?"; "How do we increase volume uplift by +3%?" Analysis: Identify high-ROI and/or high-volume archetypes; reallocation logic, not brute-force scaling. Check interdependencies (e.g. if X increased by Y%, how Z is affected; volume changes or competitor reaction). Output: Structured plan—what to increase, what to reduce, expected impact & risks. Failure mode: Do not assume to know the actual answer; state that it is an indication (many market interdependencies unknown/uncertain).
+
+  # A5: Tactical decision — "should we", "best option", "which SKUs", "increase/decrease"
+  A5:
+    scoping_framework: |-
+      - Mandatory enablers: objective (what "best" means), scope, and guardrails.
+      - Constraints mandatory if the decision is irreversible (e.g. contract change, major investment).
+      - Ask as many questions as needed in order: objective → scope → guardrails.
+      - Defaults: objective = profit/ROI when user says "best" or "should"; scope = default scope dimension values; guardrails = "no explicit constraints given". State "Assumptions used".
+
+    planning_framework: |-
+      - Bounded analysis: 2–4 feasible actions; compare and recommend the best one.
+      - Generate charts only when differences between options are clear.
+      - Do not recommend without stating objectives and constraints; check trade-offs.
+      - Stop when the recommendation is defensible; avoid endless analysis loops.
+
+    response_format: |-
+      - Answer headline (one sentence) with the recommendation (e.g. "Yes, increase promo depth" or "Best option: X").
+      - What you looked at: filters, period, data sources, objective and guardrails.
+      - Key findings: 2–5 bullets; evidence for each option; each finding must cite KPI/segment and baseline.
+      - Recommendation / next action: increase/decrease or choose option, with rationale and risk notes.
+      - Expected impact (directional if needed); assumptions & risks; confidence.
+      - Optional: next questions / follow-ups.
+
+    promo_analysis_framework: |-
+      Tactical decision (A5): Intent—decide yes/no or choose option. Examples: "Should we increase discount depth for Brand X?"; "Which SKUs should we promote (more) next year?" Mandatory enablers: Objective; Guardrails; Funding structure. Analysis path: Check status quo, ROI and competitor data (if available); if X happens, expected risks and impact. Decision logic: ROI vs depth curve (if available); risk flags (brand erosion, cannibalization). Output: Clear recommendation + confidence level.
+
+  # A6: Scenario/simulation — "compare scenarios", "what happens if", "reallocate"
+  A6:
+    scoping_framework: |-
+      - Mandatory enablers: objective (evaluation metric), scenarios to compare, constraints, and evaluation metric for comparing scenarios.
+      - Ask as many questions as needed in order: objective → scenarios/scope → constraints.
+      - Defaults: scope = default scope dimension values; state "Assumptions used" and any scenario definitions assumed.
+
+    planning_framework: |-
+      - Bounded analysis: 2–4 scenarios; comparison table and sensitivity notes.
+      - Generate scenario comparison charts.
+      - Do not present correlation as causation; state confidence and data limitations.
+      - Escalate to "needs deeper work / scenario mode" if results are highly sensitive to assumptions or strong interactions (e.g. cannibalization) cannot be observed.
+
+    response_format: |-
+      - Answer headline (one sentence) summarizing the scenario comparison and preferred scenario (if any).
+      - What you looked at: filters, period, data sources, scenario definitions and evaluation metric.
+      - Key findings: 2–5 bullets; scenario vs scenario; cite evidence and baseline.
+      - Recommendation / next action: which scenario to choose and why; expected impact; sensitivity and risks.
+      - Assumptions & risks; confidence (high/medium/low).
+      - Optional: next questions / follow-ups.
+
+    promo_analysis_framework: |-
+      Scenario (A6): Intent—compare futures. Examples: "What happens if we reallocate promo spend to Retailer Y?" Scenarios: Reallocation; Depth change; Mechanism mix. Metrics: ROI; Profit; Volume. Output: Comparison table + sensitivity notes.

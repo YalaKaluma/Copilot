@@ -1,0 +1,15 @@
+Centralized Database Migrations
+
+This directory contains all database migrations for the fullstack template.
+Migrations are shared across all services (backend, worker, etc.).
+
+To create a new migration:
+    pnpm db:create "description of changes"
+
+To run migrations:
+    pnpm db:migrate
+
+To rollback:
+    pnpm db:rollback
+
+Models should be added to packages/db/models/ and imported in env.py.

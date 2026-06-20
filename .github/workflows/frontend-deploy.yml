@@ -1,0 +1,20 @@
+name: Deploy Frontend
+
+on:
+  push:
+    branches: [main, staging]
+    paths:
+      - 'services/frontend/**'
+      - 'terraform/services/frontend/**'
+      - 'terraform/modules/**'
+      - '.github/workflows/_frontend.yml'
+      - '.github/workflows/frontend-deploy.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/_frontend.yml
+    with:
+      branch_name: ${{ github.ref_name }}
+      sha: ${{ github.sha }}
+    secrets: inherit

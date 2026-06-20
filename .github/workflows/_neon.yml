@@ -1,0 +1,298 @@
+name: Neon Database Management
+
+on:
+  workflow_call:
+    inputs:
+      action:
+        required: true
+        type: string
+      branch_name:
+        required: true
+        type: string
+    outputs:
+      database_url:
+        description: "The database connection URL"
+        value: ${{ jobs.manage-database.outputs.database_url }}
+
+jobs:
+  manage-database:
+    name: ${{ inputs.action }} database for ${{ inputs.branch_name }}
+    runs-on: ubuntu-latest
+    
+    outputs:
+      database_url: ${{ steps.create-branch.outputs.database_url }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Validate inputs
+        run: |
+          # Sanitize branch name
+          SAFE_BRANCH=$(echo "${{ inputs.branch_name }}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | cut -c1-40)
+          
+          # Don't add dev- prefix if branch already starts with dev-
+          if [[ "$SAFE_BRANCH" != dev-* ]]; then
+            SAFE_BRANCH="dev-${SAFE_BRANCH}"
+          fi
+          
+          echo "SAFE_BRANCH=${SAFE_BRANCH}" >> $GITHUB_ENV
+          
+          # Check if trying to modify protected branches
+          if [[ "$SAFE_BRANCH" == "main" ]] || [[ "$SAFE_BRANCH" == "staging" ]] || [[ "$SAFE_BRANCH" == "dev-main" ]] || [[ "$SAFE_BRANCH" == "dev-staging" ]]; then
+            echo "❌ Cannot modify protected branches (main, staging)"
+            exit 1
+          fi
+      
+      - name: Create Neon branch
+        id: create-branch
+        if: inputs.action == 'create'
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+        run: |
+          echo "Creating Neon branch: ${SAFE_BRANCH}"
+          
+          # Check if required secrets are set
+          if [ -z "$NEON_API_KEY" ]; then
+            echo "Error: NEON_API_KEY secret is not set"
+            exit 1
+          fi
+          
+          if [ -z "$NEON_PROJECT_ID" ]; then
+            echo "Error: NEON_PROJECT_ID secret is not set"
+            exit 1
+          fi
+          
+          echo "Using Neon project: ${NEON_PROJECT_ID}"
+          
+          # Check if branch already exists
+          RESPONSE=$(curl -s -X GET \
+            "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches" \
+            -H "Authorization: Bearer ${NEON_API_KEY}")
+          
+          # Debug: Show first 500 chars of response if it's not JSON
+          if ! echo "$RESPONSE" | jq -e . >/dev/null 2>&1; then
+            echo "Error: API response is not valid JSON"
+            echo "Response preview: ${RESPONSE:0:500}"
+            exit 1
+          fi
+          
+          EXISTING=$(echo "$RESPONSE" | jq -r ".branches[] | select(.name==\"${SAFE_BRANCH}\") | .name")
+          
+          if [ -n "$EXISTING" ]; then
+            echo "✅ Branch already exists: ${SAFE_BRANCH}"
+            
+            # Get existing branch ID
+            BRANCH_ID=$(echo "$RESPONSE" | jq -r ".branches[] | select(.name==\"${SAFE_BRANCH}\") | .id")
+            echo "Found existing branch ID: ${BRANCH_ID}"
+            
+            # Get connection URI for existing branch
+            echo "Fetching connection URI for existing branch..."
+            
+            # Get the database and role from the branch (assuming defaults)
+            DATABASE_NAME="neondb"
+            
+            # List roles for the branch to get the role name
+            ROLES_RESPONSE=$(curl -s -X GET \
+              "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches/${BRANCH_ID}/roles" \
+              -H "Authorization: Bearer ${NEON_API_KEY}")
+            
+            ROLE_NAME=$(echo "$ROLES_RESPONSE" | jq -r '.roles[0].name // empty')
+            
+            if [ -z "$ROLE_NAME" ]; then
+              echo "Error: Could not get role name for existing branch"
+              exit 1
+            fi
+            
+            # Use the dedicated connection_uri endpoint
+            CONNECTION_RESPONSE=$(curl -s -X GET \
+              "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/connection_uri?database_name=${DATABASE_NAME}&role_name=${ROLE_NAME}&branch_id=${BRANCH_ID}" \
+              -H "Authorization: Bearer ${NEON_API_KEY}")
+            
+            # Check for errors
+            if echo "$CONNECTION_RESPONSE" | jq -e '.message' >/dev/null 2>&1; then
+              echo "❌ Error getting connection URI:"
+              echo "$CONNECTION_RESPONSE" | jq '.message'
+              exit 1
+            fi
+            
+            # Extract the connection URI
+            CONNECTION_URI=$(echo "$CONNECTION_RESPONSE" | jq -r '.uri // empty')
+            
+            if [ -z "$CONNECTION_URI" ]; then
+              echo "ℹ️  Could not retrieve connection URI. Backend will use DATABASE_URL from Terraform state."
+              CONNECTION_URI=""  # Empty - backend will handle it
+            else
+              echo "✅ Successfully retrieved connection URI for existing branch"
+            fi
+            
+          else
+            echo "Creating new branch from main..."
+            
+            # First, get the main/production branch ID (try common names)
+            MAIN_BRANCH_ID=$(echo "$RESPONSE" | jq -r '.branches[] | select(.name=="main") | .id')
+            
+            # If "main" doesn't exist, try "production"
+            if [ -z "$MAIN_BRANCH_ID" ]; then
+              MAIN_BRANCH_ID=$(echo "$RESPONSE" | jq -r '.branches[] | select(.name=="production") | .id')
+            fi
+            
+            # If still not found, try to get the primary branch (usually has is_primary=true or is the first one)
+            if [ -z "$MAIN_BRANCH_ID" ]; then
+              MAIN_BRANCH_ID=$(echo "$RESPONSE" | jq -r '.branches[] | select(.is_primary==true) | .id')
+            fi
+            
+            # Last resort: use the first branch
+            if [ -z "$MAIN_BRANCH_ID" ]; then
+              MAIN_BRANCH_ID=$(echo "$RESPONSE" | jq -r '.branches[0].id')
+            fi
+            
+            if [ -z "$MAIN_BRANCH_ID" ]; then
+              echo "Error: Could not find a suitable parent branch"
+              echo "Available branches:"
+              echo "$RESPONSE" | jq -r '.branches[] | "\(.name) (id: \(.id), primary: \(.is_primary // false))"'
+              exit 1
+            fi
+            
+            # Get the name of the branch we're using as parent
+            MAIN_BRANCH_NAME=$(echo "$RESPONSE" | jq -r ".branches[] | select(.id==\"${MAIN_BRANCH_ID}\") | .name")
+            echo "Using parent branch: ${MAIN_BRANCH_NAME} (ID: ${MAIN_BRANCH_ID})"
+            
+            # Create branch from main
+            CREATE_RESPONSE=$(curl -s -X POST \
+              "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches" \
+              -H "Authorization: Bearer ${NEON_API_KEY}" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"endpoints\": [{
+                  \"type\": \"read_write\"
+                }],
+                \"branch\": {
+                  \"name\": \"${SAFE_BRANCH}\",
+                  \"parent_id\": \"${MAIN_BRANCH_ID}\"
+                }
+              }")
+            
+            # Check for errors
+            if echo "$CREATE_RESPONSE" | jq -e '.message' >/dev/null 2>&1; then
+              echo "❌ Error creating branch:"
+              echo "$CREATE_RESPONSE" | jq '.message'
+              exit 1
+            fi
+            
+            echo "Branch created successfully."
+            
+            BRANCH_ID=$(echo "$CREATE_RESPONSE" | jq -r '.branch.id')
+            
+            # Get connection URI using the dedicated API endpoint
+            echo "Fetching connection URI for new branch..."
+            
+            # Get the default database and role names from the create response
+            DATABASE_NAME=$(echo "$CREATE_RESPONSE" | jq -r '.databases[0].name // "neondb"')
+            ROLE_NAME=$(echo "$CREATE_RESPONSE" | jq -r '.roles[0].name // empty')
+            
+            if [ -z "$ROLE_NAME" ]; then
+              echo "Error: Could not get role name from create response"
+              exit 1
+            fi
+            
+            # Use the dedicated connection_uri endpoint
+            CONNECTION_RESPONSE=$(curl -s -X GET \
+              "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/connection_uri?database_name=${DATABASE_NAME}&role_name=${ROLE_NAME}&branch_id=${BRANCH_ID}" \
+              -H "Authorization: Bearer ${NEON_API_KEY}")
+            
+            # Check for errors
+            if echo "$CONNECTION_RESPONSE" | jq -e '.message' >/dev/null 2>&1; then
+              echo "❌ Error getting connection URI:"
+              echo "$CONNECTION_RESPONSE" | jq '.message'
+              exit 1
+            fi
+            
+            # Extract the connection URI
+            CONNECTION_URI=$(echo "$CONNECTION_RESPONSE" | jq -r '.uri // empty')
+            
+            if [ -z "$CONNECTION_URI" ]; then
+              echo "Debug: Connection response:"
+              echo "$CONNECTION_RESPONSE" | jq '.'
+              echo "❌ Failed to extract connection URI from response"
+              exit 1
+            fi
+            
+            echo "✅ Successfully retrieved connection URI"
+          fi
+          
+          if [ -z "$CONNECTION_URI" ]; then
+            echo "❌ Failed to get connection URI"
+            exit 1
+          fi
+          
+          # Convert to asyncpg format
+          ASYNC_URI="${CONNECTION_URI/postgresql:\/\//postgresql+asyncpg:\/\/}"
+          # Remove channel_binding parameter if present
+          ASYNC_URI="${ASYNC_URI//\&channel_binding=require/}"
+          ASYNC_URI="${ASYNC_URI//\?channel_binding=require\&/\?}"
+          ASYNC_URI="${ASYNC_URI//\?channel_binding=require/}"
+          
+          echo "✅ Database branch ready!"
+          echo "Branch ID: ${BRANCH_ID}"
+          
+          # Output for other jobs (base64 encode to bypass secret detection)
+          # Use -w0 to ensure single line output
+          # Use printf to avoid any newline issues
+          DATABASE_URL_B64=$(printf '%s' "${ASYNC_URI}" | base64 -w0)
+          echo "database_url=${DATABASE_URL_B64}" >> $GITHUB_OUTPUT
+          echo "branch_id=${BRANCH_ID}" >> $GITHUB_OUTPUT
+      
+      - name: Delete Neon branch
+        if: inputs.action == 'delete'
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+        run: |
+          echo "Deleting Neon branch: ${SAFE_BRANCH}"
+          
+          # Get branch ID
+          BRANCH_ID=$(curl -s -X GET \
+            "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches" \
+            -H "Authorization: Bearer ${NEON_API_KEY}" \
+            | jq -r ".branches[] | select(.name==\"${SAFE_BRANCH}\") | .id")
+          
+          if [ -z "$BRANCH_ID" ]; then
+            echo "⚠️  Branch not found: ${SAFE_BRANCH}"
+            exit 0
+          fi
+          
+          # Delete the branch
+          DELETE_RESPONSE=$(curl -s -X DELETE \
+            "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches/${BRANCH_ID}" \
+            -H "Authorization: Bearer ${NEON_API_KEY}")
+          
+          # Check for errors
+          if echo "$DELETE_RESPONSE" | jq -e '.message' >/dev/null 2>&1; then
+            echo "❌ Error deleting branch:"
+            echo "$DELETE_RESPONSE" | jq '.message'
+            exit 1
+          fi
+          
+          echo "✅ Database branch deleted!"
+      
+      - name: Summary
+        run: |
+          echo "## 📊 Database Branch Management" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ inputs.action }}" == "create" ]; then
+            echo "✅ **Created** database branch: \`${SAFE_BRANCH}\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
+            echo "1. Deploy your application using the deployment workflow" >> $GITHUB_STEP_SUMMARY
+            echo "2. The database will have a copy of production data" >> $GITHUB_STEP_SUMMARY
+            echo "3. Remember to delete when done to save costs" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "🗑️ **Deleted** database branch: \`${SAFE_BRANCH}\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Cleanup Notes:" >> $GITHUB_STEP_SUMMARY
+            echo "- Database branch has been removed from Neon" >> $GITHUB_STEP_SUMMARY
+            echo "- Cloud Run services should be deleted separately if needed" >> $GITHUB_STEP_SUMMARY
+          fi

@@ -1,0 +1,99 @@
+# Skai Copilot version v9-dev
+version: "v9-dev"
+execution_agents: []
+model:
+  model_id: "gpt-5.4"
+prompts:
+  base: promo-standalone-base:v1
+  orchestrator: single-agent-promo-orchestrator:v2
+  report_generation: report-generation:v1
+  intent_classifier: intent-classification-system:v2
+orchestrator_version: single_agent_promo_orchestrator
+archetype_config:
+  A1:
+    scoping_framework: |-
+      - Confirm the descriptive scope: market, retailer/channel, brand/category, and time range.
+      - Ask at most 1 clarifying question if those are missing and cannot be inferred.
+      - Use default scope values when missing and state assumptions clearly.
+    planning_framework: |-
+      - Keep the analysis bounded to descriptive reporting and direct comparisons.
+      - Use only the minimum KPIs and cuts needed to answer the question.
+    response_format: |-
+      - Lead with a direct answer.
+      - Summarize the scope used, then list 2-5 factual findings with cited metrics.
+      - No recommendations unless the user explicitly asks for them.
+    promo_analysis_framework: |-
+      - For promo asks, report observed metrics such as ROI, uplift, investment, intensity, and timing without causal claims.
+  A2:
+    scoping_framework: |-
+      - Confirm the outcome to explain, the scope, and the time range.
+      - Ask only what is necessary to identify the main drivers.
+    planning_framework: |-
+      - Bound the analysis to the top 2-4 drivers of the observed result.
+      - Avoid causal language unless the evidence genuinely supports it.
+    response_format: |-
+      - Lead with the main explanation.
+      - List 2-5 supporting findings with evidence for each driver.
+      - State assumptions, data limitations, and confidence.
+    promo_analysis_framework: |-
+      - For promo asks, inspect ROI, uplift, depth, timing, retailer mix, and baseline effects to explain the result.
+  A3:
+    scoping_framework: |-
+      - Confirm the objective metric, the scope, and any practical constraints.
+      - Default the objective to ROI or profit when the user does not specify it.
+    planning_framework: |-
+      - Rank a short list of opportunities by value, feasibility, and confidence.
+      - Keep the shortlist small and explain the ranking logic.
+    response_format: |-
+      - Lead with the main opportunity or shortlist.
+      - Summarize ranking logic and evidence for each candidate.
+      - Include concise action implications where appropriate.
+    promo_analysis_framework: |-
+      - For promo asks, rank opportunity areas across brand, retailer, mechanism, timing, and depth combinations.
+  A4:
+    scoping_framework: |-
+      - Confirm the target, the scope, and any guardrails.
+      - Ask only for missing target or guardrail information that materially changes the plan.
+    planning_framework: |-
+      - Build a bounded set of lever options tied to the target and constraints.
+      - Keep trade-offs explicit and avoid pretending to have perfect certainty.
+    response_format: |-
+      - Lead with the recommended path to the objective.
+      - Summarize the levers, trade-offs, expected direction of impact, and risks.
+    promo_analysis_framework: |-
+      - For "what should we do differently next year", "what should we stop", or promo reallocation questions, treat the task as historical reallocation guidance, not simulation or forecast.
+      - Default the KPI to ROI unless the user explicitly asks for a different KPI.
+      - Use the most granular supported breakdowns that can reveal actionable promo pockets, and prefer product-level cuts when available.
+      - Identify low-ROI pockets that also represent meaningful investment or scale; these are candidates to stop or reduce.
+      - Identify high-ROI pockets that also represent meaningful investment or scale; these are candidates to prioritize.
+      - Recommend reallocating spend from the lower-ROI pockets to the higher-ROI pockets.
+      - If dimensions like discount depth, duration, or mechanics are available in the current tool output, test them as candidate breakdowns; otherwise use the closest supported dimensions and say so explicitly.
+      - Do not present this as a guaranteed future outcome; frame it as evidence-based reallocation guidance from historical performance.
+  A5:
+    scoping_framework: |-
+      - Confirm what “best” means, the scope, and any decision guardrails.
+      - Default the objective to ROI or profit if the user does not specify it.
+    planning_framework: |-
+      - Compare a small number of feasible actions and recommend one.
+      - Keep the decision logic explicit and tied to evidence.
+    response_format: |-
+      - Lead with the recommendation.
+      - List the evidence, trade-offs, and operational risks behind it.
+    promo_analysis_framework: |-
+      - For promo recommendation questions, default the KPI to ROI unless the user specifies another KPI.
+      - Compare historically weaker and stronger promo pockets using the most granular supported breakdowns.
+      - Prefer recommendations that shift investment away from low-ROI activity with meaningful spend toward high-ROI activity with meaningful spend.
+      - If dimensions like discount depth, duration, or mechanics are available in the current tool output, test them as candidate breakdowns; otherwise use the closest supported dimensions and say so explicitly.
+      - Do not present this as a guaranteed future outcome; frame it as evidence-based reallocation guidance from historical performance.
+  A6:
+    scoping_framework: |-
+      - Confirm the scenario choices, the evaluation metric, and any constraints.
+      - Ask follow-ups only when scenario definitions are too ambiguous to compare.
+    planning_framework: |-
+      - Compare a bounded set of scenarios and make assumptions explicit.
+      - Highlight sensitivity and uncertainty rather than overstating precision.
+    response_format: |-
+      - Lead with the preferred scenario or the comparison result.
+      - Summarize scenario definitions, evidence, sensitivities, and risks.
+    promo_analysis_framework: |-
+      - For promo asks, compare future promo mixes or reallocations using stated assumptions and caveats.

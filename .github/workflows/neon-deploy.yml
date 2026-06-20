@@ -1,0 +1,25 @@
+name: Deploy Database Branch
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - create
+          - delete
+      branch_name:
+        description: 'Branch name (without dev- prefix)'
+        required: false
+        type: string
+
+jobs:
+  manage-neon:
+    name: ${{ inputs.action }} database branch
+    uses: ./.github/workflows/_neon.yml
+    with:
+      action: ${{ inputs.action }}
+      branch_name: ${{ inputs.branch_name || github.ref_name }}
+    secrets: inherit

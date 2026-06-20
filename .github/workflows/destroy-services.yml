@@ -1,0 +1,163 @@
+name: Destroy Services
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch_name:
+        description: 'Branch name to destroy (e.g., feature-xyz, dev-branch)'
+        required: true
+        type: string
+      clean_storage:
+        description: 'Clean GCS bucket before destroying? (required for bucket deletion)'
+        required: true
+        type: boolean
+        default: true
+      destroy_worker:
+        description: 'Destroy worker service?'
+        required: false
+        type: boolean
+        default: true
+      destroy_gpu_worker:
+        description: 'Destroy GPU worker service?'
+        required: false
+        type: boolean
+        default: false
+      confirm_protected_branch:
+        description: '⚠️ I confirm I want to DELETE main/staging resources (required for protected branches)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  validate-protected-branch:
+    name: Validate Protected Branch Deletion
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check protected branch confirmation
+        run: |
+          BRANCH="${{ github.event.inputs.branch_name }}"
+          CONFIRMED="${{ github.event.inputs.confirm_protected_branch }}"
+
+          if [[ "$BRANCH" == "main" || "$BRANCH" == "staging" ]]; then
+            if [[ "$CONFIRMED" != "true" ]]; then
+              echo "❌ ERROR: Deleting '$BRANCH' requires explicit confirmation."
+              echo ""
+              echo "To delete protected branch resources, you must:"
+              echo "  1. Check the 'confirm_protected_branch' checkbox"
+              echo "  2. Re-run this workflow"
+              echo ""
+              echo "⚠️  This action will permanently delete all resources for '$BRANCH'!"
+              exit 1
+            fi
+            echo "⚠️  WARNING: Proceeding with deletion of protected branch '$BRANCH'"
+            echo "✅ Confirmation received"
+          else
+            echo "✅ Branch '$BRANCH' is not protected, proceeding..."
+          fi
+
+  clean-storage:
+    name: Clean Storage Bucket
+    needs: validate-protected-branch
+    if: github.event.inputs.clean_storage == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Authenticate with Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GOOGLE_CREDENTIALS }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          version: 'latest'
+
+      - name: Clean bucket contents
+        run: |
+          # Determine bucket name based on branch
+          BRANCH="${{ github.event.inputs.branch_name }}"
+          PROJECT_ID="${{ secrets.GCP_PROJECT_ID }}"
+          APP_NAME="${{ vars.APP_NAME || 'app' }}"
+
+          # Calculate bucket name using same logic as Terraform
+          if [[ "$BRANCH" == "main" ]]; then
+            ENV="prod"
+          else
+            ENV="$BRANCH"
+          fi
+
+          # Generate short hash for uniqueness
+          HASH=$(echo -n "${PROJECT_ID}-${APP_NAME}" | md5sum | cut -c1-4)
+          BUCKET_NAME="${APP_NAME}-${ENV}-${HASH}"
+          BUCKET_NAME=$(echo "$BUCKET_NAME" | tr '[:upper:]' '[:lower:]' | tr '_' '-')
+
+          echo "Checking for bucket: gs://$BUCKET_NAME"
+
+          if gsutil ls -b "gs://$BUCKET_NAME" 2>/dev/null; then
+            echo "Found bucket, cleaning contents..."
+            gsutil -m rm -r "gs://$BUCKET_NAME/**" 2>/dev/null || true
+            echo "✅ Bucket contents cleaned"
+          else
+            echo "Bucket not found or already deleted"
+          fi
+
+  destroy-frontend:
+    name: Destroy Frontend Service
+    needs: [validate-protected-branch, clean-storage]
+    if: |
+      always() &&
+      needs.validate-protected-branch.result == 'success' &&
+      (needs.clean-storage.result == 'success' || needs.clean-storage.result == 'skipped')
+    uses: ./.github/workflows/_frontend.yml
+    with:
+      branch_name: ${{ github.event.inputs.branch_name }}
+      sha: ${{ github.sha }}
+      is_destroy: true
+    secrets: inherit
+
+  destroy-worker:
+    name: Destroy Worker Service
+    needs: [validate-protected-branch, clean-storage]
+    if: |
+      always() &&
+      needs.validate-protected-branch.result == 'success' &&
+      github.event.inputs.destroy_worker == 'true' &&
+      (needs.clean-storage.result == 'success' || needs.clean-storage.result == 'skipped')
+    uses: ./.github/workflows/_worker.yml
+    with:
+      branch_name: ${{ github.event.inputs.branch_name }}
+      sha: ${{ github.sha }}
+      is_destroy: true
+    secrets: inherit
+
+  destroy-gpu-worker:
+    name: Destroy GPU Worker Service
+    needs: [validate-protected-branch, clean-storage]
+    if: |
+      always() &&
+      needs.validate-protected-branch.result == 'success' &&
+      github.event.inputs.destroy_gpu_worker == 'true' &&
+      (needs.clean-storage.result == 'success' || needs.clean-storage.result == 'skipped')
+    uses: ./.github/workflows/_gpu-worker.yml
+    with:
+      branch_name: ${{ github.event.inputs.branch_name }}
+      sha: ${{ github.sha }}
+      is_destroy: true
+    secrets: inherit
+
+  destroy-backend:
+    name: Destroy Backend Service
+    needs: [validate-protected-branch, clean-storage, destroy-frontend, destroy-worker, destroy-gpu-worker]
+    if: |
+      always() &&
+      needs.validate-protected-branch.result == 'success' &&
+      (needs.clean-storage.result == 'success' || needs.clean-storage.result == 'skipped') &&
+      (needs.destroy-frontend.result == 'success' || needs.destroy-frontend.result == 'skipped') &&
+      (needs.destroy-worker.result == 'success' || needs.destroy-worker.result == 'skipped') &&
+      (needs.destroy-gpu-worker.result == 'success' || needs.destroy-gpu-worker.result == 'skipped')
+    uses: ./.github/workflows/_backend.yml
+    with:
+      branch_name: ${{ github.event.inputs.branch_name }}
+      sha: ${{ github.sha }}
+      is_destroy: true
+    secrets: inherit
