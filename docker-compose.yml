@@ -1,0 +1,89 @@
+# Development Docker Compose Configuration
+# For production, services are deployed to Cloud Run via CI/CD
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: ./services/backend/Dockerfile.dev
+    ports:
+      - '${BACKEND_PORT:-8080}:8080'
+      - '${DEBUGPY_PORT:-5678}:5678'
+    volumes:
+      - ./services/backend/app:/app
+      - ./packages:/packages
+      - backend-venv:/app/.venv
+      - ./.sandbox:/sandbox
+    env_file:
+      - ./environment/.env.backend
+    environment:
+      # Use fake-gcs for local development
+      - STORAGE_EMULATOR_HOST=fake-gcs:4443
+      # Add packages to Python path
+      - PYTHONPATH=/
+      # Debugging (optional): container always listens on 5678; host port follows DEBUGPY_PORT
+      - DEBUGPY=${DEBUGPY:-}
+      - DEBUGPY_PORT=5678
+      - DEBUGPY_WAIT=${DEBUGPY_WAIT:-0}
+      # GPU Worker URL (for GPU-accelerated tasks)
+      # Default: native GPU worker on host (pnpm dev:gpu)
+      - GPU_WORKER_URL=${GPU_WORKER_URL:-http://host.docker.internal:8082}
+      # Redis for pub/sub (progress streaming)
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - sandbox-executor
+    networks:
+      - app-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/api/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: ./services/frontend/Dockerfile.dev
+    ports:
+      - '${FRONTEND_PORT:-3000}:3000'
+    volumes:
+      - ./services/frontend/app/src:/app/src
+      - ./services/frontend/app/public:/app/public
+      - ./services/frontend/app/index.html:/app/index.html
+      - ./services/frontend/app/vite.config.ts:/app/vite.config.ts
+      - ./services/frontend/app/tsconfig.json:/app/tsconfig.json
+      - /app/node_modules
+    env_file:
+      - ./environment/.env.frontend
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+  sandbox-executor:
+    build:
+      context: .
+      dockerfile: ./services/backend/Dockerfile.sandbox
+    command: [ "python", "/runner/sandbox_worker.py" ]
+    volumes:
+      - ./.sandbox:/sandbox
+      - ./services/backend/app/services/sandbox_worker.py:/runner/sandbox_worker.py:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    network_mode: "none"
+    pids_limit: 128
+    mem_limit: 1g
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  backend-venv:

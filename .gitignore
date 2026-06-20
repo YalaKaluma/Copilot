@@ -1,0 +1,73 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+*.pyc
+__pycache__/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Environment files
+.env
+.env.*
+!.env.*.example
+environment/.env.*
+!environment/.env.*.example
+environment/dev/.env.*
+!environment/dev/.env.*.example
+
+# Setup tracking
+.setup-progress
+
+# IDE
+.vscode/*
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# VSCODE launch.json
+!.vscode/launch.json
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfplan
+*.tfvars
+!*.tfvars.example
+gcp.json
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log
+logs/
+
+# Testing
+coverage/
+.coverage
+.pytest_cache/
+*.cover
+
+# Build artifacts
+*.tar.gz
+*.zip
+
+# Generated files
+docs/erd.png
+docs/erd.svg
+docs/erd.pdf
+
+# Setup files
+.google-credentials.json
+.setup-secrets.sh
+
+# Prompt optimizer temp version (created at runtime)
+services/backend/app/config/versions/temp.yaml
+
+# Learning records
+learning-records/**
+.sandbox/
