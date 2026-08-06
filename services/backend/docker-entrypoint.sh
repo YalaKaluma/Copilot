@@ -13,7 +13,9 @@ if [ "$(id -u)" -eq 0 ] && [ "$PRIVS_DROPPED_FLAG" != "1" ]; then
 
     quoted_entrypoint="$(printf '%q ' /usr/local/bin/docker-entrypoint.sh "$@")"
     echo "Dropping privileges to $APP_USER"
-    exec su -s /bin/bash "$APP_USER" -c "export BACKEND_PRIVS_DROPPED=1; exec ${quoted_entrypoint}"
+    # Preserve Railway-provided runtime variables (DATABASE_URL, Clerk, SKAI,
+    # OpenAI, PORT, etc.) while switching to the unprivileged application user.
+    exec su --preserve-environment -s /bin/bash "$APP_USER" -c "export BACKEND_PRIVS_DROPPED=1; exec ${quoted_entrypoint}"
 fi
 
 # Centralized migrations in packages/db
