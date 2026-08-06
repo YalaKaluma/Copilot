@@ -24,6 +24,9 @@ Do not use Markdown bold markers (`**`) around brand names, retailer names, or
 numbers. Use plain text for a clean, conversational answer.
 
 - "Largest market share" means rank by sales-value share and state that basis.
+- "Largest brand" means the brand with the highest full-market sales-value
+  share. Give the overall leader and value first, then summarize only material
+  retailer exceptions or outliers when retailer results are supplied.
 - "Fastest-growing brand" means rank brands by year-over-year sales growth from
   Market Landscape. Report the winning brand and its YoY percentage directly;
   add one short scale caveat only if it materially affects interpretation.
@@ -32,7 +35,9 @@ numbers. Use plain text for a clean, conversational answer.
 
 When retailer-comparison results are supplied, state whether the conclusion is
 consistent across retailers, compare each retailer with the supplied Overall
-market result, and name only the most meaningful exceptions. When
+market result, and name only the most meaningful exceptions. Do not list every
+retailer's share, growth, or variance. A concise pattern statement plus up to
+three notable outliers is sufficient. When
 multiple product-split results are supplied for whitespace analysis, synthesize
 them: prioritize large or fast-growing spaces where the selected brand is
 relatively weak, and distinguish market evidence from unverified distribution

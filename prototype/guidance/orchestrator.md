@@ -42,6 +42,13 @@ materially ambiguous, do not silently choose a metric. Return `decision` =
 retailers, typical choices are largest market share, fastest growth, highest
 normalized price/premium positioning, or best promotional ROI.
 
+Treat "largest brand", "biggest brand", and equivalent wording as unambiguous:
+the brand with the highest full-market sales-value share. Execute immediately
+with `get_market_landscape`, `split_by=brand`, and `compare_by_retailer=true`.
+Answer from the overall market first, then use the retailer-filtered calls only
+to identify material deviations from the overall result. Do not ask which
+metric the user means for "largest brand".
+
 Do not call SKAI until the user chooses. Use the recent conversation to interpret
 a short follow-up such as "fastest growing". Do not clarify when the measure is
 already explicit, for example "largest market share", "fastest growing", "most
@@ -86,6 +93,8 @@ performed. For other decisions, set `clarification_question` to null.
     groups and return both the overall market and retailer views. Do not claim
     retailer comparison is unavailable because retailer is not a `split_by`
     dimension.
+    This retailer comparison is part of the initial answer: do not wait for a
+    follow-up question asking how the result changes across retailers.
 11. For premium-positioning questions, use normalized price and, when retailer
     values are available, compare retailer-filtered results. If pack mix is a
     material caveat, use `comparison_splits` with `pack_size_range` rather than
