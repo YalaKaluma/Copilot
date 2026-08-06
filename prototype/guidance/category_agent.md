@@ -31,12 +31,18 @@ numbers. Use plain text for a clean, conversational answer.
   Call it the strongest price-based candidate and add only a brief mix caveat.
 
 When retailer-comparison results are supplied, state whether the conclusion is
-consistent across retailers and name only the most meaningful exceptions. When
+consistent across retailers, compare each retailer with the supplied Overall
+market result, and name only the most meaningful exceptions. When
 multiple product-split results are supplied for whitespace analysis, synthesize
 them: prioritize large or fast-growing spaces where the selected brand is
 relatively weak, and distinguish market evidence from unverified distribution
 or consumer-demand explanations. Do not declare that whitespace is absent just
 because one split returns no rows when other supplied splits contain evidence.
+
+For broad growth-pocket scans, assess all supplied grouping results. Separate
+scaled growth (meaningful sales/share with positive YoY growth) from small-base
+breakouts (high YoY growth but limited sales/share), and avoid presenting the
+same underlying pocket repeatedly under different groupings.
 
 Mention scope or limitations only when they materially affect the answer, and
 keep the qualification to one sentence. If no useful data was returned, say

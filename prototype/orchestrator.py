@@ -183,6 +183,24 @@ class Orchestrator:
         """Match user-supplied filter spelling/case to SKAI's catalog values."""
         catalog = filter_values.get("filters", filter_values)
         arguments = plan.get("arguments", {})
+
+        def available_values(key: str) -> list[Any] | None:
+            if not isinstance(catalog, dict):
+                return None
+            aliases = {
+                "retailers": ("retailers", "retailer_groups"),
+                "subcategories": ("subcategories", "sub_categories"),
+                "pack_size_range_values": (
+                    "pack_size_range_values",
+                    "pack_size_ranges",
+                ),
+            }
+            for candidate in aliases.get(key, (key,)):
+                values = catalog.get(candidate)
+                if isinstance(values, list) and values:
+                    return values
+            return None
+
         for key in (
             "brands",
             "categories",
@@ -193,7 +211,7 @@ class Orchestrator:
             "pack_size_range_values",
             "price_tiers",
         ):
-            available = catalog.get(key) if isinstance(catalog, dict) else None
+            available = available_values(key)
             requested = arguments.get(key)
             if not available or not requested:
                 continue
@@ -201,3 +219,10 @@ class Orchestrator:
             arguments[key] = [
                 canonical.get(str(value).casefold(), value) for value in requested
             ]
+
+        # Retailer is a Market Landscape filter, not a group-by dimension. An
+        # empty selection with compare_by_retailer means compare every group.
+        if arguments.get("compare_by_retailer") and not arguments.get("retailers"):
+            retailers = available_values("retailers")
+            if retailers:
+                arguments["retailers"] = retailers

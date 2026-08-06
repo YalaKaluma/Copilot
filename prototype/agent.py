@@ -70,7 +70,12 @@ class SkaiAgent:
                 return {"analysis_mode": "multiple_splits", "results": results}
 
             if compare_by_retailer and retailers:
-                results = {}
+                overall_arguments = {**base_arguments, "retailers": []}
+                results = {
+                    "Overall market": self.skai.get_market_landscape(
+                        **overall_arguments
+                    )
+                }
                 for retailer in retailers:
                     retailer_arguments = {
                         **base_arguments,

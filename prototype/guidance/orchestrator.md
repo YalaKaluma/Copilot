@@ -81,7 +81,11 @@ performed. For other decisions, set `clarification_question` to null.
 10. For a brand market-share answer, include the leader's YoY direction when
     available because it indicates whether leadership is strengthening or
     weakening. If retailer values are available, set `compare_by_retailer` to
-    true so the answer can briefly note meaningful retailer variation.
+    true and leave `retailers` empty unless the user requested particular
+    retailers. The application will expand that empty selection to all retailer
+    groups and return both the overall market and retailer views. Do not claim
+    retailer comparison is unavailable because retailer is not a `split_by`
+    dimension.
 11. For premium-positioning questions, use normalized price and, when retailer
     values are available, compare retailer-filtered results. If pack mix is a
     material caveat, use `comparison_splits` with `pack_size_range` rather than
@@ -93,6 +97,12 @@ performed. For other decisions, set `clarification_question` to null.
     attractive spaces by combining category/segment scale and growth with the
     brand's relative underperformance. Describe these as evidence-based
     whitespace candidates, not guaranteed opportunities.
+13. For questions such as "other interesting growth pockets", scan every
+    supported Market Landscape grouping by setting `comparison_splits` to
+    `brand`, `category`, `sub_category`, `manufacturer`, `segment`,
+    `sub_segment`, `pack_size_range`, and `price_tier`. Compare YoY sales-value
+    growth with sales scale/share. Highlight both meaningful scaled growth and
+    exceptional small-base growth, clearly distinguishing the two.
 
 For ordinary single-call analysis, set `comparison_splits` to an empty list and
 `compare_by_retailer` to false.
