@@ -9,6 +9,7 @@ import { chatHistoryService } from '../services/chatHistoryService';
 import type { ConversationDetail } from '../types/chatHistory.types';
 import type { ChartItem, ChartSpec } from '../types/chart.types';
 import { createAsyncSerialTaskQueue } from '../utils/asyncQueue';
+import { API_BASE_URL } from '../../../shared/constants/api';
 
 // Module-level map of deleted session IDs → deletion timestamp.
 // Background streams that outlive their component mount check this before
@@ -1211,7 +1212,7 @@ export function useOrchestratorChat(
     try {
       const token = await getToken();
       if (token && currentSessionId) {
-        await fetch(`/api/orchestrator/session/${currentSessionId}`, {
+        await fetch(`${API_BASE_URL}/orchestrator/session/${currentSessionId}`, {
           method: 'DELETE',
           headers: {
             Authorization: `Bearer ${token}`,

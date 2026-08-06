@@ -38,8 +38,12 @@ FROM nginx:alpine
 # Copy built assets from builder
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy nginx configuration
-COPY services/frontend/nginx.conf /etc/nginx/conf.d/default.conf
+# Copy nginx configuration template. The nginx image renders templates with
+# environment variables on startup, including Railway's PORT.
+COPY services/frontend/nginx.conf.template /etc/nginx/templates/default.conf.template
+
+# Default for local Docker runs. Railway overrides this at runtime.
+ENV PORT=80
 
 # Expose port
 EXPOSE 80

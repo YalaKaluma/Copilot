@@ -5,7 +5,7 @@ Provides common dependencies for authentication, database sessions, and services
 
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Security, status
+from fastapi import Depends, Header, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 import jwt
@@ -214,7 +214,7 @@ ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
 TemplateServiceDep = Annotated[TemplateService, Depends(get_template_service)]
 
 
-def _build_skai_extra_headers() -> dict[str, str]:
+def _build_skai_extra_headers(tenant_code: str | None = None) -> dict[str, str]:
     settings = get_settings()
     extra_headers: dict[str, str] = {}
     if settings.skai_api_origin:
@@ -223,6 +223,8 @@ def _build_skai_extra_headers() -> dict[str, str]:
         extra_headers["Referer"] = settings.skai_api_referer
     if settings.skai_api_user_agent:
         extra_headers["User-Agent"] = settings.skai_api_user_agent
+    if tenant_code:
+        extra_headers["X-Tenant-Code"] = tenant_code
     return extra_headers
 
 
@@ -264,6 +266,7 @@ async def get_skai_api_for_user(
     auth: dict = Depends(verify_clerk_token),
     db: AsyncSession = Depends(get_db),
     skai_auth_service: SkaiAuthService = Depends(get_skai_auth_service),
+    tenant_code: str | None = Header(default=None, alias="X-Tenant-Code"),
 ) -> SKAIApi:
     """Get a SKAI API client configured with the current user's token.
 
@@ -277,7 +280,7 @@ async def get_skai_api_for_user(
     return SKAIApi(
         base_url=settings.skai_api_url,
         api_key=settings.skai_api_key,
-        extra_headers=_build_skai_extra_headers(),
+        extra_headers=_build_skai_extra_headers(tenant_code),
         auth_token=token,
     )
 
@@ -289,6 +292,7 @@ async def get_skai_api_v2_for_user(
     auth: dict = Depends(verify_clerk_token),
     db: AsyncSession = Depends(get_db),
     skai_auth_service: SkaiAuthService = Depends(get_skai_auth_service),
+    tenant_code: str | None = Header(default=None, alias="X-Tenant-Code"),
 ) -> SkaiApiV2Client:
     """Get a SKAI API v2 client configured with the current user's token."""
     token = await _get_user_skai_token(auth, db, skai_auth_service)
@@ -297,6 +301,6 @@ async def get_skai_api_v2_for_user(
     return SkaiApiV2Client(
         base_url=settings.skai_api_v2_url or settings.skai_api_url,
         api_key=settings.skai_api_key,
-        extra_headers=_build_skai_extra_headers(),
+        extra_headers=_build_skai_extra_headers(tenant_code),
         auth_token=token,
     )

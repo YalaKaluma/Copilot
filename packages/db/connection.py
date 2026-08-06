@@ -14,7 +14,8 @@ def fix_database_url_for_asyncpg(database_url: str) -> str:
 
     Handles:
     1. Escaped slashes from Terraform/Cloud Run (\\/ becomes /)
-    2. Neon's 'sslmode=require' -> asyncpg's 'ssl=require'
+    2. Standard Postgres URLs -> SQLAlchemy asyncpg URLs
+    3. Neon's 'sslmode=require' -> asyncpg's 'ssl=require'
 
     Args:
         database_url: PostgreSQL connection string
@@ -34,6 +35,17 @@ def fix_database_url_for_asyncpg(database_url: str) -> str:
         # Also handle URL encoding if present
         database_url = database_url.replace("%2F", "/")
         logger.debug(f"Fixed DATABASE_URL: {database_url[:50]}...")
+
+    if database_url.startswith("postgres://"):
+        logger.debug("Converting postgres:// URL to postgresql+asyncpg://")
+        database_url = "postgresql+asyncpg://" + database_url.removeprefix(
+            "postgres://"
+        )
+    elif database_url.startswith("postgresql://"):
+        logger.debug("Converting postgresql:// URL to postgresql+asyncpg://")
+        database_url = "postgresql+asyncpg://" + database_url.removeprefix(
+            "postgresql://"
+        )
 
     if "sslmode=require" in database_url:
         logger.debug(

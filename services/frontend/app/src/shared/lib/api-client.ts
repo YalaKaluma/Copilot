@@ -35,6 +35,10 @@ class ApiClient {
             console.warn('Failed to get Clerk token:', error);
           }
         }
+        const tenantCode = window.localStorage.getItem('skaiTenantCode');
+        if (tenantCode) {
+          config.headers['X-Tenant-Code'] = tenantCode;
+        }
         return config;
       },
       (error) => {
@@ -135,6 +139,14 @@ class ApiClient {
   // HTTP method shortcuts
   async get<T = unknown>(url: string, config?: RequestOptions): Promise<T> {
     const response = await this.axiosInstance.get<T>(url, config);
+    return response.data;
+  }
+
+  async getBlob(url: string, config?: RequestOptions): Promise<Blob> {
+    const response = await this.axiosInstance.get<Blob>(url, {
+      ...config,
+      responseType: 'blob',
+    });
     return response.data;
   }
 

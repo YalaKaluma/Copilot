@@ -237,6 +237,13 @@ Terraform is organized by reusable modules and per-service stacks:
   - `backend`
   - `frontend`
 
+Railway + Neon deployment is also supported through per-service Railway config files:
+
+- Backend: `services/backend/railway.toml`
+- Frontend: `services/frontend/railway.toml`
+
+See `docs/deployment-railway-neon.md` for setup steps and required variables.
+
 ## Repository Layout
 
 ```text

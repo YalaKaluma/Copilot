@@ -3,6 +3,8 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Body
+from fastapi.responses import StreamingResponse
+from io import BytesIO
 
 from core.dependencies import AuthTokenDep, DatabaseDep, ConversationServiceDep
 from core.logging import get_logger
@@ -18,6 +20,7 @@ from schemas.conversation import (
     MessageFeedbackOut,
     SaveConversationRequest,
 )
+from services.feedback_workbook import build_feedback_workbook
 
 logger = get_logger(__name__)
 
@@ -91,6 +94,32 @@ async def get_conversation_by_session(
         session_id, user.id, db
     )
     return to_conversation_detail(conversation)
+
+
+@router.get("/session/{session_id}/feedback-workbook")
+async def download_feedback_workbook(
+    session_id: str,
+    auth: AuthTokenDep,
+    conversation_service: ConversationServiceDep,
+    db: DatabaseDep,
+):
+    """Download the authenticated user's conversation as an Excel review file."""
+    conversation = await conversation_service.get_conversation_by_session_id(
+        session_id, auth["user"].id, db
+    )
+    payload = build_feedback_workbook(conversation)
+    headers = {
+        "Content-Disposition": (
+            f'attachment; filename="growth-copilot-feedback-{session_id}.xlsx"'
+        )
+    }
+    return StreamingResponse(
+        BytesIO(payload),
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        headers=headers,
+    )
 
 
 @router.post(

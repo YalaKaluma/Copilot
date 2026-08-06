@@ -61,7 +61,9 @@ export function OrchestratorPage({
   const [skaiConnected, setSkaiConnected] = useState(false);
   const [skaiStatusKnown, setSkaiStatusKnown] = useState(false);
   const [skaiVersions, setSkaiVersions] = useState<string[]>([]);
-  const [skaiVersion, setSkaiVersion] = useState<string | null>(null);
+  const [skaiVersion, setSkaiVersion] = useState<string | null>(() =>
+    location.pathname.startsWith('/growth-copilot') ? 'v8' : null
+  );
   const [resolvedProjectName, setResolvedProjectName] = useState<string | null>(null);
   const [leftPaneWidth, setLeftPaneWidth] = useState(320);
   const [rightPaneWidth, setRightPaneWidth] = useState(384);
@@ -297,13 +299,20 @@ export function OrchestratorPage({
   }, [sendMessage, activeTemplate]);
 
   const handleSelectConversation = useCallback((detail: ConversationDetail) => {
-    navigate(`/chat/${detail.sessionId}`, { state: { conversation: detail } });
-  }, [navigate]);
+    const base = location.pathname.startsWith('/growth-copilot')
+      ? '/growth-copilot'
+      : '/chat';
+    navigate(`${base}/${detail.sessionId}`, { state: { conversation: detail } });
+  }, [navigate, location.pathname]);
 
   const handleNewChat = useCallback(async () => {
     await clearSession(); // best-effort server cleanup; local state cleared synchronously inside clearSession
-    navigate('/chat');
-  }, [clearSession, navigate]);
+    navigate(
+      location.pathname.startsWith('/growth-copilot')
+        ? '/growth-copilot'
+        : '/chat'
+    );
+  }, [clearSession, navigate, location.pathname]);
 
   const showPlan = currentStage === 'execution' || currentStage === 'done' || (plan && Array.isArray((plan as Record<string, unknown>).steps) && ((plan as Record<string, unknown>).steps as unknown[]).length > 0);
 
@@ -450,6 +459,7 @@ export function OrchestratorPage({
             versions={skaiVersions}
             selectedVersion={skaiVersion}
             onVersionChange={setSkaiVersion}
+            feedbackSessionId={sessionId ?? runtimeSessionId ?? null}
             activeProject={
               projectId
                 ? { id: projectId, name: projectNameProp ?? resolvedProjectName ?? 'Project' }

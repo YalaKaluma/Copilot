@@ -8,7 +8,9 @@ interface AppLayoutProps {
 
 export default function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation();
-  const isChatRoute = location.pathname.startsWith("/chat");
+  const isChatRoute =
+    location.pathname.startsWith("/chat") ||
+    location.pathname.startsWith("/growth-copilot");
 
   return (
     <div className="h-screen flex flex-col bg-sk-white overflow-hidden">

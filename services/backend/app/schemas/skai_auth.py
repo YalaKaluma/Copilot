@@ -51,3 +51,9 @@ class SkaiStatusResponse(BaseResponse):
     expires_at: datetime | None = Field(
         default=None, description="Token expiration time"
     )
+
+
+class SkaiTenantsResponse(BaseResponse):
+    """Tenant codes granted to the authenticated SKAI account."""
+
+    tenants: list[str] = Field(default_factory=list)

@@ -2,7 +2,7 @@
 version: "v9-dev"
 execution_agents: []
 model:
-  model_id: "gpt-5.4"
+  model_id: "gpt-5.6"
 prompts:
   base: promo-standalone-base:v1
   orchestrator: single-agent-promo-orchestrator:v2

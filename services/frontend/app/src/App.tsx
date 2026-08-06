@@ -114,6 +114,8 @@ function AppContent() {
             <Route path="/chat/projects/:projectId" element={<ProjectDetailPage />} />
             <Route path="/chat/templates" element={<TemplatesPage />} />
             <Route path="/chat/:sessionId" element={<OrchestratorPageWrapper />} />
+            <Route path="/growth-copilot" element={<OrchestratorPageWrapper />} />
+            <Route path="/growth-copilot/:sessionId" element={<OrchestratorPageWrapper />} />
             <Route path="/user" element={<UserAccountPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

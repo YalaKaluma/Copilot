@@ -37,7 +37,7 @@ execution_agents:
     prompt_id: pricing_simulation_agent:v2
     tools: null
 model:
-  model_id: "gpt-5.2"
+  model_id: "gpt-5.6"
 prompts:
   base: base:v4
   orchestrator: orchestrator:v8
@@ -52,9 +52,11 @@ archetype_config:
   # A1: Descriptive/KPI — "what is", "show me", "trend", "vs last period"
   A1:
     scoping_framework: |-
-      - Mandatory enablers: scope (market/country, channel, retailer, category, brand, granularity) and time range.
-      - Goal is optional; do not over-ask for descriptive questions.
-      - Ask at most 1 clarifying questions (e.g. period, category/brand) if not inferrable from context.
+      - For an ambiguous ranking such as "top brand" or "top retailer", ask one short question to establish the metric: market share, year-over-year growth, normalized price/premium position, or promotional ROI.
+      - Treat "fastest-growing brand" as highest year-over-year sales growth from the category/market landscape; do not ask what growth means.
+      - Treat "largest brand" or "market leader" as sales-value market share unless the user specifies volume share.
+      - Treat "most premium" as the highest size-normalized average price, with a brief mix caveat.
+      - Do not require the user to provide a category or date when the endpoint can return a valid default market view.
       - Defaults when missing: time range = last complete period; scope = default scope dimension values.
       - Never jump to analysis without at least scope and time range; state "Assumptions used" when using defaults.
 
@@ -64,13 +66,11 @@ archetype_config:
       - Match depth to question: do not over-analyze; stop when the question is answered.
 
     response_format: |-
-      - Main Rule: answer the user's question directly with shortest answer possible.
-      - Answer headline (one sentence) directly answering the user's question.
-      - What you looked at: filters, period, data sources.
-      - Key findings: 2–5 bullets; each finding must cite KPI value/trend and segmentation (e.g. retailer/channel) and comparison baseline.
-      - No recommendation section (descriptive only).
-      - Assumptions & risks if defaults were used.
-      - Optional: next questions / follow-ups.
+      - Main rule: answer the exact question directly and conversationally.
+      - For a simple ranking, give the winner and metric first, then at most two useful comparisons.
+      - Do not automatically add sections such as scope, market picture, evidence, growth pattern, or next action.
+      - Do not use Markdown bold around brand names, retailer names, or numbers.
+      - Add a limitation only when it materially changes the interpretation, and keep it to one sentence.
 
     promo_analysis_framework: |-
       Descriptive (A1): Intent—understand current promo situation. Examples: "How much of our volume is sold on promotion?"; "What promo mechanisms do we use most?" Analysis path: Pull promo intensity, depth, mechanism and frequency. Compare vs prior period or peers. Output: Facts only, no recommendations. Failure mode to avoid: Interpreting intensity or depth as effectiveness.

@@ -36,11 +36,11 @@ RUN useradd -m -u 1000 appuser \
 # Set environment to prevent uv from downloading anything at runtime
 ENV UV_NO_SYNC=1
 
-# Expose port
+# Expose the default local port. Railway provides PORT at runtime.
 EXPOSE 8080
 
 # Use entrypoint for migrations
 ENTRYPOINT ["docker-entrypoint.sh"]
 
 # Production command - use python directly from venv to avoid uv downloading packages
-CMD [".venv/bin/python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--loop", "asyncio"]
+CMD ["/bin/sh", "-c", "exec .venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080} --loop asyncio"]

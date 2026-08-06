@@ -4,7 +4,7 @@
  */
 export function getApiDocsUrl(): string {
   // Use VITE_BACKEND_URL if available (production/staging)
-  const backendUrl = import.meta.env.VITE_BACKEND_URL;
+  const backendUrl = import.meta.env.VITE_BACKEND_URL?.replace(/\/+$/, '');
 
   if (backendUrl) {
     // Production/staging - use the backend URL directly
@@ -20,11 +20,11 @@ export function getApiDocsUrl(): string {
  * @returns The full URL to the health endpoint
  */
 export function getHealthUrl(): string {
-  const backendUrl = import.meta.env.VITE_BACKEND_URL;
+  const backendUrl = import.meta.env.VITE_BACKEND_URL?.replace(/\/+$/, '');
 
   if (backendUrl) {
-    return `${backendUrl}/health`;
+    return `${backendUrl}/api/health`;
   }
 
-  return 'http://localhost:8080/health';
+  return 'http://localhost:8080/api/health';
 }

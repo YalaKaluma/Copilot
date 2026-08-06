@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { Link } from 'react-router-dom';
-import { Lock, LockOpen, ChevronDown, LogOut, User, Moon, Sun, Tag, FolderOpen } from 'lucide-react';
+import { Lock, LockOpen, ChevronDown, Download, LogOut, User, Moon, Sun, Tag, FolderOpen } from 'lucide-react';
 import { apiClient } from '../../lib/api-client';
 import { cn } from '../../utils/cn';
 import { useTheme } from '../../providers/ThemeProvider';
@@ -19,6 +19,7 @@ export interface ChatTopBarProps {
   onVersionChange?: (version: string | null) => void;
   /** When set, show the active project (chat scoped to this project). */
   activeProject?: { id: string; name: string };
+  feedbackSessionId?: string | null;
 }
 
 export function ChatTopBar({
@@ -29,6 +30,7 @@ export function ChatTopBar({
   selectedVersion = null,
   onVersionChange,
   activeProject,
+  feedbackSessionId,
 }: ChatTopBarProps) {
   const { user } = useUser();
   const { resolvedTheme, setTheme } = useTheme();
@@ -36,6 +38,11 @@ export function ChatTopBar({
   const [versionDropdownOpen, setVersionDropdownOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [tenants, setTenants] = useState<string[]>([]);
+  const [selectedTenant, setSelectedTenant] = useState(
+    () => window.localStorage.getItem('skaiTenantCode') ?? ''
+  );
+  const [isDownloadingFeedback, setIsDownloadingFeedback] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const versionDropdownRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -48,6 +55,26 @@ export function ChatTopBar({
     window.addEventListener('skai-auth-change', handleAuthChange);
     return () => window.removeEventListener('skai-auth-change', handleAuthChange);
   }, []);
+
+  useEffect(() => {
+    if (!skaiConnected) {
+      setTenants([]);
+      return;
+    }
+    apiClient
+      .get<{ tenants: string[] }>('/skai/auth/tenants')
+      .then(({ tenants: available }) => {
+        setTenants(available ?? []);
+        const current = window.localStorage.getItem('skaiTenantCode') ?? '';
+        if (current && available.includes(current)) {
+          setSelectedTenant(current);
+        } else if (available.length > 0) {
+          setSelectedTenant(available[0]);
+          window.localStorage.setItem('skaiTenantCode', available[0]);
+        }
+      })
+      .catch(() => setTenants([]));
+  }, [skaiConnected]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -69,6 +96,9 @@ export function ChatTopBar({
     setIsDisconnecting(true);
     try {
       await apiClient.delete('/skai/auth/disconnect');
+      window.localStorage.removeItem('skaiTenantCode');
+      setSelectedTenant('');
+      setTenants([]);
       window.dispatchEvent(new CustomEvent('skai-auth-change', { detail: { connected: false } }));
       setDropdownOpen(false);
       onSkaiAuthChange();
@@ -76,6 +106,26 @@ export function ChatTopBar({
       // silently fail
     } finally {
       setIsDisconnecting(false);
+    }
+  };
+
+  const handleFeedbackDownload = async () => {
+    if (!feedbackSessionId) return;
+    setIsDownloadingFeedback(true);
+    try {
+      const blob = await apiClient.getBlob(
+        `/conversations/session/${feedbackSessionId}/feedback-workbook`
+      );
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `growth-copilot-feedback-${feedbackSessionId}.xlsx`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setIsDownloadingFeedback(false);
     }
   };
 
@@ -96,6 +146,42 @@ export function ChatTopBar({
       </div>
       {/* Version selector (dev/staging) + connection status + user profile */}
       <div className="flex items-center gap-3">
+        {feedbackSessionId && (
+          <button
+            type="button"
+            onClick={handleFeedbackDownload}
+            disabled={isDownloadingFeedback}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-sk-contrast-grey hover:text-sk-text disabled:opacity-50"
+            title="Download conversation feedback workbook"
+          >
+            <Download className="h-4 w-4" />
+            <span className="hidden xl:inline">
+              {isDownloadingFeedback ? 'Preparing…' : 'Feedback XLSX'}
+            </span>
+          </button>
+        )}
+        {skaiConnected && tenants.length > 0 && (
+          <label className="flex items-center gap-2 text-xs text-sk-contrast-grey">
+            <span className="hidden xl:inline">Workspace</span>
+            <select
+              value={selectedTenant}
+              onChange={(event) => {
+                const tenant = event.target.value;
+                setSelectedTenant(tenant);
+                window.localStorage.setItem('skaiTenantCode', tenant);
+                window.dispatchEvent(
+                  new CustomEvent('skai-tenant-change', { detail: { tenant } })
+                );
+              }}
+              className="rounded-md border border-gray-400/60 dark:border-white/20 bg-sk-white px-2 py-1.5 text-xs text-sk-text outline-none focus:border-sk-accent-red"
+              aria-label="SKAI workspace"
+            >
+              {tenants.map((tenant) => (
+                <option key={tenant} value={tenant}>{tenant}</option>
+              ))}
+            </select>
+          </label>
+        )}
         {/* Version selector: only visible when versionSelectorEnabled (non-prod); hidden in prod */}
         {versionSelectorEnabled && (
           <div ref={versionDropdownRef} className="relative">

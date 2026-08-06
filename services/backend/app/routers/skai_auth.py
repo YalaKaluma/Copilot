@@ -1,18 +1,57 @@
 """SKAI authentication endpoints for per-user Cognito tokens."""
 
-from fastapi import APIRouter, HTTPException, status
+import base64
+import json
+from typing import Annotated
 
-from core.dependencies import AuthTokenDep, DatabaseDep, SkaiAuthServiceDep
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from core.dependencies import (
+    AuthTokenDep,
+    DatabaseDep,
+    SkaiAuthServiceDep,
+    _get_user_skai_token,
+)
 from schemas.skai_auth import (
     SkaiDisconnectResponse,
     SkaiLoginRequest,
     SkaiLoginResponse,
     SkaiRefreshResponse,
     SkaiStatusResponse,
+    SkaiTenantsResponse,
 )
 from services.skai_auth_service import SkaiAuthError
 
 router = APIRouter(tags=["SKAI Auth"])
+
+
+def _tenant_codes_from_token(token: str) -> list[str]:
+    try:
+        payload_part = token.split(".")[1]
+        payload = json.loads(base64.urlsafe_b64decode(payload_part + "==="))
+        groups = payload.get("cognito:groups") or []
+        return sorted(
+            group
+            for group in groups
+            if isinstance(group, str) and not group.endswith("_admin")
+        )
+    except (IndexError, ValueError, TypeError, json.JSONDecodeError):
+        return []
+
+
+@router.get(
+    "/skai/auth/tenants",
+    response_model=SkaiTenantsResponse,
+    summary="List SKAI tenants available to the connected account",
+)
+async def skai_tenants(
+    token: Annotated[str, Depends(_get_user_skai_token)],
+) -> SkaiTenantsResponse:
+    return SkaiTenantsResponse(
+        success=True,
+        message="SKAI tenants loaded",
+        tenants=_tenant_codes_from_token(token),
+    )
 
 
 @router.get(
