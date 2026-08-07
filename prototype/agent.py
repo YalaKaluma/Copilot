@@ -98,9 +98,18 @@ class SkaiAgent:
             return self._get_promo_heatmap(heatmap_arguments)
         if tool == "get_price_ladder":
             allowed = {"brands", "subcategories", "retailers", "sku_ids"}
-            return self.skai.get_price_ladder(
-                **{key: value for key, value in arguments.items() if key in allowed}
-            )
+            ladder_arguments = {
+                key: value for key, value in arguments.items() if key in allowed
+            }
+            focus_brands = ladder_arguments.pop("brands", []) or []
+            ladder = self.skai.get_price_ladder(**ladder_arguments)
+            if focus_brands:
+                return {
+                    "analysis_mode": "price_ladder_positioning",
+                    "focus_brands": focus_brands,
+                    "ladder": ladder,
+                }
+            return ladder
         if tool == "get_simulator_base":
             allowed = {
                 "brands", "categories", "subcategories", "retailers", "sku_ids",
@@ -311,6 +320,14 @@ class SkaiAgent:
                         "data": (simulation.get("data") or [])[:100],
                         "waterfall": simulation.get("waterfall"),
                     },
+                }
+            elif result.get("analysis_mode") == "price_ladder_positioning":
+                ladder = result.get("ladder") or {}
+                compact_result = {
+                    "analysis_mode": result["analysis_mode"],
+                    "focus_brands": result.get("focus_brands") or [],
+                    "summary": ladder.get("summary"),
+                    "data": (ladder.get("data") or [])[:100],
                 }
             else:
                 compact_result = {

@@ -108,8 +108,13 @@ performed. For other decisions, set `clarification_question` to null.
     This retailer comparison is part of the initial answer: do not wait for a
     follow-up question asking how the result changes across retailers.
 11. For premium-positioning questions, use normalized price and, when retailer
-    values are available, compare retailer-filtered results. If pack mix is a
-    material caveat, use `comparison_splits` with `pack_size_range` rather than
+    values are available, compare retailer-filtered results. For a plain request
+    such as "What is the price positioning of Brand X?", use `get_price_ladder`
+    with the requested brand in `brands`; the agent retrieves the full ladder so
+    the brand retains a competitive benchmark. Use Market Landscape and
+    `comparison_splits` only when the user explicitly requests size-normalized
+    positioning, pack architecture, or pricing opportunities across product
+    cuts. If pack mix is a material caveat, use `pack_size_range` rather than
     merely speculating about it.
 12. For market-share whitespace, do not rely on a single filtered subcategory
     view. Set `comparison_splits` to the relevant available cuts among

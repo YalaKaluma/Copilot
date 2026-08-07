@@ -7,6 +7,13 @@ between price and sales-value share, and only the most material positioning
 gaps or outliers. Average prices may reflect product, pack, retailer, and mix;
 do not interpret price differences as willingness to pay or elasticity.
 
+When `price_ladder_positioning` is supplied, locate each requested focus brand
+in the full competitive ladder. State its average price, its premium or discount
+versus the market or closest material competitors, and its sales-value share or
+rank. Do not say positioning is unavailable merely because normalized
+price-per-weight is absent; clearly label the ladder basis as average price and
+add a brief pack/mix caveat.
+
 For a price simulation, lead with the requested scenario and its projected
 volume, sales, and margin deltas. Then identify the most material SKU or
 retailer contributors and state the elasticity mode when available. Clearly

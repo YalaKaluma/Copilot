@@ -2,7 +2,10 @@
 
 `get_price_ladder` calls `GET /api/v1/pricing/brand-ladder`. It supports brand,
 subcategory, retailer, and SKU filters and returns brand prices, volume, sales,
-and sales-value share.
+and sales-value share. For a requested brand's positioning, put that brand in
+the plan's `brands` list. The execution layer retrieves the full competitive
+ladder and uses the brand list as the analytical focus rather than filtering
+away its benchmark.
 
 `get_simulator_base` calls `GET /api/v1/pricing/simulator/base`. Use it to inspect
 available simulator products and current prices.
