@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -17,6 +18,12 @@ from skai_auth import CognitoSrpAuthenticator, SkaiAuthError, tenant_codes_from_
 from skai_service import SkaiError, SkaiGrowthService
 
 load_dotenv()
+
+
+def _escape_currency_for_markdown(text: str) -> str:
+    """Prevent dollar amounts from being parsed as inline LaTeX by Streamlit."""
+    return re.sub(r"(?<!\\)\$", r"\\$", text)
+
 
 st.set_page_config(
     page_title="SKAI Growth Copilot",
@@ -407,7 +414,7 @@ with st.sidebar:
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+        st.markdown(_escape_currency_for_markdown(message["content"]))
         if message.get("plan"):
             with st.expander("Execution plan"):
                 st.json(message["plan"])
@@ -492,7 +499,7 @@ if question:
                         st.write("SKAI analysis complete")
                         answer = agent.answer(question, plan, result)
                 service.close()
-                st.markdown(answer)
+                st.markdown(_escape_currency_for_markdown(answer))
                 with st.expander("Execution plan"):
                     st.json(plan)
                 if show_raw:
