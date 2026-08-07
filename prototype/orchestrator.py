@@ -66,6 +66,18 @@ PLAN_SCHEMA = {
                 "duration_bin": {"type": "array", "items": {"type": "string"}},
                 "depth_bin": {"type": "array", "items": {"type": "string"}},
                 "promo_tactics": {"type": "array", "items": {"type": "string"}},
+                "comparison_axes": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "x_dim_kind": {"type": "string", "enum": AXES},
+                            "y_dim_kind": {"type": "string", "enum": AXES},
+                        },
+                        "required": ["x_dim_kind", "y_dim_kind"],
+                        "additionalProperties": False,
+                    },
+                },
                 "pack_size_range_values": {
                     "type": "array",
                     "items": {"type": "string"},
@@ -99,6 +111,7 @@ PLAN_SCHEMA = {
                 "duration_bin",
                 "depth_bin",
                 "promo_tactics",
+                "comparison_axes",
                 "pack_size_range_values",
                 "price_tiers",
                 "price_metric",

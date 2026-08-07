@@ -22,3 +22,10 @@ axis and `retailer`, `brand`, or `duration` on the other. Keep `depth_bin` empty
 unless the user explicitly requested particular brackets, so every available
 depth band is returned. The application retries once with the axes swapped if
 SKAI returns only an `unknown` depth bucket.
+
+For broad promotion-improvement questions, do not rely on one heatmap. Cover
+the major controllable or segmentable drivers with a compact set of views:
+discount depth by duration, retailer by brand, retailer by SKU, channel by
+brand, and time since last promotion by brand. These views can identify where
+to adjust mechanics or reallocate activity, but cannot prescribe exact dates or
+causal calendar sequencing.

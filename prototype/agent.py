@@ -36,6 +36,28 @@ class SkaiAgent:
             for row in (result.get("data") or [])
         )
 
+    def _get_promo_heatmap(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Run a heatmap and retry a missing depth dimension when applicable."""
+        result = self.skai.get_promo_heatmap(**arguments)
+        if (
+            "discount_depth"
+            in {arguments.get("x_dim_kind"), arguments.get("y_dim_kind")}
+            and not self._has_usable_discount_depth(result)
+        ):
+            swapped_arguments = {
+                **arguments,
+                "x_dim_kind": arguments.get("y_dim_kind"),
+                "y_dim_kind": arguments.get("x_dim_kind"),
+            }
+            swapped_result = self.skai.get_promo_heatmap(**swapped_arguments)
+            if self._has_usable_discount_depth(swapped_result):
+                return swapped_result
+            result["discount_depth_diagnostic"] = {
+                "retried_with_axes_swapped": True,
+                "usable_depth_brackets": False,
+            }
+        return result
+
     def execute(self, plan: dict[str, Any]) -> dict[str, Any]:
         if plan.get("decision") != "execute":
             raise ValueError(plan.get("limitation") or "This question is unsupported.")
@@ -51,31 +73,29 @@ class SkaiAgent:
             heatmap_arguments = {
                 key: value for key, value in arguments.items() if key in allowed
             }
-            result = self.skai.get_promo_heatmap(**heatmap_arguments)
+            comparison_axes = arguments.get("comparison_axes") or []
+            if comparison_axes:
+                base_arguments = {
+                    key: value
+                    for key, value in heatmap_arguments.items()
+                    if key not in {"x_dim_kind", "y_dim_kind"}
+                }
+                results = {}
+                for axes in comparison_axes:
+                    x_axis = axes["x_dim_kind"]
+                    y_axis = axes["y_dim_kind"]
+                    if x_axis == y_axis:
+                        continue
+                    results[f"{x_axis}_by_{y_axis}"] = self._get_promo_heatmap(
+                        {
+                            **base_arguments,
+                            "x_dim_kind": x_axis,
+                            "y_dim_kind": y_axis,
+                        }
+                    )
+                return {"analysis_mode": "multiple_heatmaps", "results": results}
 
-            # Retry the opposite orientation before concluding that SKAI has no
-            # usable discount-depth buckets for this perimeter.
-            if (
-                "discount_depth"
-                in {
-                    heatmap_arguments.get("x_dim_kind"),
-                    heatmap_arguments.get("y_dim_kind"),
-                }
-                and not self._has_usable_discount_depth(result)
-            ):
-                swapped_arguments = {
-                    **heatmap_arguments,
-                    "x_dim_kind": heatmap_arguments.get("y_dim_kind"),
-                    "y_dim_kind": heatmap_arguments.get("x_dim_kind"),
-                }
-                swapped_result = self.skai.get_promo_heatmap(**swapped_arguments)
-                if self._has_usable_discount_depth(swapped_result):
-                    return swapped_result
-                result["discount_depth_diagnostic"] = {
-                    "retried_with_axes_swapped": True,
-                    "usable_depth_brackets": False,
-                }
-            return result
+            return self._get_promo_heatmap(heatmap_arguments)
         if tool == "get_market_landscape":
             allowed = {
                 "period_start", "period_end", "sku_ids", "brands", "categories",
@@ -167,11 +187,30 @@ class SkaiAgent:
                 }
             guidance_file = "category_agent.md"
         else:
-            compact_result = {
-                "summary": result.get("summary"),
-                "data": (result.get("data") or [])[:100],
-                "envelope": result.get("envelope"),
-            }
+            if result.get("analysis_mode") == "multiple_heatmaps":
+                compact_result = {
+                    "analysis_mode": result["analysis_mode"],
+                    "results": {
+                        key: {
+                            "summary": value.get("summary"),
+                            "data": (value.get("data") or [])[:100],
+                            "envelope": value.get("envelope"),
+                            "discount_depth_diagnostic": value.get(
+                                "discount_depth_diagnostic"
+                            ),
+                        }
+                        for key, value in result.get("results", {}).items()
+                    },
+                }
+            else:
+                compact_result = {
+                    "summary": result.get("summary"),
+                    "data": (result.get("data") or [])[:100],
+                    "envelope": result.get("envelope"),
+                    "discount_depth_diagnostic": result.get(
+                        "discount_depth_diagnostic"
+                    ),
+                }
             guidance_file = "promo_agent.md"
         guidance = (GUIDANCE_DIR / guidance_file).read_text(encoding="utf-8")
         response = self.client.chat.completions.create(

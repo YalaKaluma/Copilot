@@ -112,6 +112,16 @@ performed. For other decisions, set `clarification_question` to null.
     `sub_segment`, `pack_size_range`, and `price_tier`. Compare YoY sales-value
     growth with sales scale/share. Highlight both meaningful scaled growth and
     exceptional small-base growth, clearly distinguishing the two.
+14. Treat broad questions about what to change in next year's promotion plan,
+    calendar, or strategy as multi-driver diagnostic questions. Use
+    `comparison_axes` to request these heatmaps in one plan:
+    `discount_depth` by `duration`, `retailer` by `brand`, `retailer` by `sku`,
+    `channel` by `brand`, and `time_since_last_promo` by `brand`. This covers
+    mechanics, customer variation, portfolio variation, channel, and spacing.
+    Keep the top-level axes equal to the first comparison for inspectability.
+    Recommend only levers supported by populated ROI, incremental margin,
+    investment, uplift, and promo-week evidence. The heatmap cannot recommend
+    exact calendar dates or event sequencing.
 
 For ordinary single-call analysis, set `comparison_splits` to an empty list and
-`compare_by_retailer` to false.
+`comparison_axes` to an empty list, and `compare_by_retailer` to false.

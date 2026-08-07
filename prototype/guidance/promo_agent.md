@@ -36,3 +36,14 @@ compared. This indicates missing or unbucketed depth data in the SKAI response,
 not a planner failure. If no usable data was returned,
 identify the specific missing field without padding the answer with generic
 advice.
+
+When `multiple_heatmaps` are supplied for a broad promotion-plan question,
+synthesize across all views rather than answering from the first one. Lead with
+the three to five most actionable levers, covering mechanics (depth and
+duration), retailer differences, and brand/SKU concentration where evidence is
+populated. Include channel or time-since-last-promotion only when those views
+add material evidence. For every recommendation, state the relevant return or
+incremental-margin evidence and its investment or promo-week support. Avoid an
+exhaustive cell dump, deduplicate overlapping findings, and distinguish a
+portfolio reallocation recommendation from unsupported advice about exact
+dates, sequencing, or total annual frequency.
