@@ -58,11 +58,17 @@ class SkaiGrowthService:
         path: str,
         *,
         params: dict[str, Any] | None = None,
+        json_body: dict[str, Any] | None = None,
         market_api: bool = False,
     ) -> dict[str, Any]:
         try:
             client = self._market_client if market_api else self._client
-            response = client.request(method, path, params=params)
+            response = client.request(
+                method,
+                path,
+                params=params,
+                json=json_body,
+            )
             response.raise_for_status()
             payload = response.json()
             if not isinstance(payload, dict):
@@ -111,5 +117,42 @@ class SkaiGrowthService:
             "GET",
             "/api/v1/pricing/market-landscape",
             params=params,
+            market_api=True,
+        )
+
+    def get_price_ladder(self, **filters: Any) -> dict[str, Any]:
+        """Return brand price positioning, share, sales, and volume."""
+        params = {
+            key: value
+            for key, value in filters.items()
+            if value is not None and value != [] and value != ""
+        }
+        return self._request(
+            "GET",
+            "/api/v1/pricing/brand-ladder",
+            params=params,
+            market_api=True,
+        )
+
+    def get_simulator_base(self, **filters: Any) -> dict[str, Any]:
+        """Return the SKU/product IDs and current values required to simulate."""
+        params = {
+            key: value
+            for key, value in filters.items()
+            if value is not None and value != [] and value != ""
+        }
+        return self._request(
+            "GET",
+            "/api/v1/pricing/simulator/base",
+            params=params,
+            market_api=True,
+        )
+
+    def run_price_simulation(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Run a pricing scenario using product IDs resolved from base data."""
+        return self._request(
+            "POST",
+            "/api/v1/pricing/simulator/run",
+            json_body=payload,
             market_api=True,
         )

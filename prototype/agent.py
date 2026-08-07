@@ -96,6 +96,89 @@ class SkaiAgent:
                 return {"analysis_mode": "multiple_heatmaps", "results": results}
 
             return self._get_promo_heatmap(heatmap_arguments)
+        if tool == "get_price_ladder":
+            allowed = {"brands", "subcategories", "retailers", "sku_ids"}
+            return self.skai.get_price_ladder(
+                **{key: value for key, value in arguments.items() if key in allowed}
+            )
+        if tool == "get_simulator_base":
+            allowed = {
+                "brands", "categories", "subcategories", "retailers", "sku_ids",
+                "owned_brand", "include_zero_volume",
+            }
+            return self.skai.get_simulator_base(
+                **{key: value for key, value in arguments.items() if key in allowed}
+            )
+        if tool == "run_price_simulation":
+            allowed = {
+                "brands", "categories", "subcategories", "retailers", "sku_ids",
+                "owned_brand", "include_zero_volume",
+            }
+            base_arguments = {
+                key: value for key, value in arguments.items() if key in allowed
+            }
+            base = self.skai.get_simulator_base(**base_arguments)
+            base_rows = base.get("data") or []
+            if not base_rows:
+                raise ValueError(
+                    "SKAI returned no simulator base products for the requested scope."
+                )
+
+            price_change_pct = arguments.get("price_change_pct")
+            new_price = arguments.get("new_price")
+            if price_change_pct is None and new_price is None:
+                raise ValueError(
+                    "A percentage price change or a new price is required to run "
+                    "the pricing simulation."
+                )
+            if new_price is not None and len(base_rows) != 1:
+                raise ValueError(
+                    "An absolute new price can only be applied when the scope "
+                    "resolves to one simulator product. Specify one SKU."
+                )
+
+            price_changes = []
+            for row in base_rows:
+                product_id = row.get("product_id")
+                old_price = row.get("old_price")
+                if product_id is None or old_price is None:
+                    continue
+                target_price = (
+                    float(new_price)
+                    if new_price is not None
+                    else float(old_price) * (1 + float(price_change_pct) / 100)
+                )
+                price_changes.append(
+                    {
+                        "product_id": int(product_id),
+                        "new_price": round(target_price, 4),
+                        "delisted": False,
+                    }
+                )
+            if not price_changes:
+                raise ValueError(
+                    "SKAI simulator base data did not contain usable product IDs "
+                    "and current prices."
+                )
+
+            simulation = self.skai.run_price_simulation(
+                {
+                    "price_changes": price_changes,
+                    "owned_brand": arguments.get("owned_brand"),
+                    "config": {
+                        "elasticity_mode": "fallback",
+                        "vtm_mode": "market_share",
+                    },
+                    "include_charts": arguments.get("include_charts", False),
+                }
+            )
+            return {
+                "analysis_mode": "price_simulation",
+                "requested_price_change_pct": price_change_pct,
+                "requested_new_price": new_price,
+                "base": base,
+                "simulation": simulation,
+            }
         if tool == "get_market_landscape":
             allowed = {
                 "period_start", "period_end", "sku_ids", "brands", "categories",
@@ -186,7 +269,7 @@ class SkaiAgent:
                     "envelope": result.get("envelope"),
                 }
             guidance_file = "category_agent.md"
-        else:
+        elif plan.get("tool") == "get_promo_heatmap":
             if result.get("analysis_mode") == "multiple_heatmaps":
                 compact_result = {
                     "analysis_mode": result["analysis_mode"],
@@ -212,6 +295,31 @@ class SkaiAgent:
                     ),
                 }
             guidance_file = "promo_agent.md"
+        else:
+            if result.get("analysis_mode") == "price_simulation":
+                simulation = result.get("simulation") or {}
+                base = result.get("base") or {}
+                compact_result = {
+                    "analysis_mode": result["analysis_mode"],
+                    "requested_price_change_pct": result.get(
+                        "requested_price_change_pct"
+                    ),
+                    "requested_new_price": result.get("requested_new_price"),
+                    "base_data": (base.get("data") or [])[:100],
+                    "simulation": {
+                        "kpis": simulation.get("kpis"),
+                        "data": (simulation.get("data") or [])[:100],
+                        "waterfall": simulation.get("waterfall"),
+                    },
+                }
+            else:
+                compact_result = {
+                    "summary": result.get("summary"),
+                    "kpis": result.get("kpis"),
+                    "data": (result.get("data") or [])[:100],
+                    "waterfall": result.get("waterfall"),
+                }
+            guidance_file = "pricing_agent.md"
         guidance = (GUIDANCE_DIR / guidance_file).read_text(encoding="utf-8")
         response = self.client.chat.completions.create(
             model=self.model,

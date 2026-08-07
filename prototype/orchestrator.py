@@ -45,7 +45,14 @@ PLAN_SCHEMA = {
         "steps": {"type": "array", "items": {"type": "string"}},
         "tool": {
             "type": "string",
-            "enum": ["none", "get_promo_heatmap", "get_market_landscape"],
+            "enum": [
+                "none",
+                "get_promo_heatmap",
+                "get_market_landscape",
+                "get_price_ladder",
+                "get_simulator_base",
+                "run_price_simulation",
+            ],
         },
         "arguments": {
             "type": "object",
@@ -93,6 +100,11 @@ PLAN_SCHEMA = {
                     "items": {"type": "string", "enum": MARKET_SPLITS},
                 },
                 "compare_by_retailer": {"type": "boolean"},
+                "price_change_pct": {"type": ["number", "null"]},
+                "new_price": {"type": ["number", "null"]},
+                "owned_brand": {"type": ["string", "null"]},
+                "include_zero_volume": {"type": "boolean"},
+                "include_charts": {"type": "boolean"},
             },
             "required": [
                 "x_dim_kind",
@@ -118,6 +130,11 @@ PLAN_SCHEMA = {
                 "split_by",
                 "comparison_splits",
                 "compare_by_retailer",
+                "price_change_pct",
+                "new_price",
+                "owned_brand",
+                "include_zero_volume",
+                "include_charts",
             ],
             "additionalProperties": False,
         },
@@ -157,12 +174,18 @@ class Orchestrator:
         market_guidance = (GUIDANCE_DIR / "market_landscape_tool.md").read_text(
             encoding="utf-8"
         )
+        pricing_guidance = (GUIDANCE_DIR / "pricing_tool.md").read_text(
+            encoding="utf-8"
+        )
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
                 {
                     "role": "system",
-                    "content": f"{guidance}\n\n{tool_guidance}\n\n{market_guidance}",
+                    "content": (
+                        f"{guidance}\n\n{tool_guidance}\n\n"
+                        f"{market_guidance}\n\n{pricing_guidance}"
+                    ),
                 },
                 {
                     "role": "user",

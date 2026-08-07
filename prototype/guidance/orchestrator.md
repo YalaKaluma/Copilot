@@ -15,6 +15,14 @@ time since last promotion.
 and average price. Use it for market structure, rankings, growth, and carefully
 qualified premium-positioning questions.
 
+`get_price_ladder` returns brand-level average, promotional, and non-promotional
+prices alongside volume, sales, and sales-value share. Use it for competitive
+price hierarchy and positioning questions.
+
+`get_simulator_base` returns the real simulator product IDs and current prices.
+`run_price_simulation` automatically retrieves that base and applies either a
+percentage change or one absolute new price before calling the simulator.
+
 Market Landscape accepts retailer-group filters. To determine whether a brand's
 share, growth, or price position changes across retailers, set
 `compare_by_retailer` to true and populate `retailers` with the valid retailer
@@ -30,6 +38,10 @@ The filter catalog supplies valid filter values, not performance evidence.
   comparisons to the promotion heatmap.
 - Route market share, category growth, market structure, and average-price
   questions to Market Landscape.
+- Route price hierarchy, price leaders, and price-positioning questions to the
+  price ladder.
+- Route explicit forward-looking price-change questions to the pricing
+  simulator. Never use Market Landscape as a substitute for a simulation.
 - Plan only the supported part of a partially supported question and state the
   material limitation.
 - Use `unsupported` only when neither endpoint can provide useful evidence.
@@ -122,6 +134,15 @@ performed. For other decisions, set `clarification_question` to null.
     Recommend only levers supported by populated ROI, incremental margin,
     investment, uplift, and promo-week evidence. The heatmap cannot recommend
     exact calendar dates or event sequencing.
+15. For a price simulation, require a specific percentage price change or an
+    absolute new price and a sufficiently precise SKU scope. Use
+    `price_change_pct` for changes such as +5% or -3%. Use `new_price` only when
+    exactly one SKU is requested. If the change or SKU scope is missing, ask one
+    concise clarification question and do not call SKAI. The agent resolves
+    product IDs and current prices from simulator base data; never invent them.
+16. Use `get_simulator_base` alone when the user asks which products are
+    available for simulation or requests current simulator inputs without a
+    what-if scenario.
 
 For ordinary single-call analysis, set `comparison_splits` to an empty list and
 `comparison_axes` to an empty list, and `compare_by_retailer` to false.

@@ -8,8 +8,10 @@ This folder extracts the smallest useful slice of the full copilot:
 4. `agent.py` executes the plan and produces an evidence-grounded answer.
 5. `app.py` provides the Streamlit chat UI.
 
-The prototype supports `GET /api/v1/promo/heatmap` and
-`GET /api/v1/pricing/market-landscape`. It also calls `GET /api/v1/filter-values` so
+The prototype supports `GET /api/v1/promo/heatmap`,
+`GET /api/v1/pricing/market-landscape`, `GET /api/v1/pricing/brand-ladder`,
+`GET /api/v1/pricing/simulator/base`, and
+`POST /api/v1/pricing/simulator/run`. It also calls `GET /api/v1/filter-values` so
 the planner uses valid SKAI dimensions and filters.
 
 Both endpoints use `SKAI_API_URL` by default. `SKAI_MARKET_API_URL` is only an
