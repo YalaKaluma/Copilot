@@ -31,7 +31,8 @@ For optimal discount-depth questions, compare every returned discount-depth
 bracket on ROI and incremental gross profit. Use investment and promo-week counts
 to avoid recommending an immaterial cell. If the response contains only an
 `unknown` depth bracket, state briefly that SKAI did not return usable depth
-brackets; do not pretend they were compared. If no usable data was returned,
+brackets after testing both heatmap-axis orientations; do not pretend they were
+compared. This indicates missing or unbucketed depth data in the SKAI response,
+not a planner failure. If no usable data was returned,
 identify the specific missing field without padding the answer with generic
 advice.
-

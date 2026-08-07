@@ -17,3 +17,8 @@ The endpoint is appropriate for concentration and cross-sectional comparison. It
 is not a substitute for calendar, event-ranking, trend, baseline-review or
 simulation endpoints.
 
+For an ideal or optimal discount-depth question, place `discount_depth` on one
+axis and `retailer`, `brand`, or `duration` on the other. Keep `depth_bin` empty
+unless the user explicitly requested particular brackets, so every available
+depth band is returned. The application retries once with the axes swapped if
+SKAI returns only an `unknown` depth bucket.

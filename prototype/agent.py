@@ -20,6 +20,22 @@ class SkaiAgent:
     client: OpenAI
     model: str
 
+    @staticmethod
+    def _has_usable_discount_depth(result: dict[str, Any]) -> bool:
+        """Return whether the heatmap contains at least one real depth bracket."""
+        summary = result.get("summary") or {}
+        depth_on_x = summary.get("x_dim_kind") == "discount_depth"
+        depth_on_y = summary.get("y_dim_kind") == "discount_depth"
+        if not (depth_on_x or depth_on_y):
+            return True
+
+        depth_key = "x_value" if depth_on_x else "y_value"
+        unusable = {"", "unknown", "none", "null"}
+        return any(
+            str(row.get(depth_key) or "").strip().casefold() not in unusable
+            for row in (result.get("data") or [])
+        )
+
     def execute(self, plan: dict[str, Any]) -> dict[str, Any]:
         if plan.get("decision") != "execute":
             raise ValueError(plan.get("limitation") or "This question is unsupported.")
@@ -32,9 +48,34 @@ class SkaiAgent:
                 "subcategories", "retailers", "channels", "sku_ids",
                 "duration_bin", "depth_bin", "promo_tactics",
             }
-            return self.skai.get_promo_heatmap(
-                **{key: value for key, value in arguments.items() if key in allowed}
-            )
+            heatmap_arguments = {
+                key: value for key, value in arguments.items() if key in allowed
+            }
+            result = self.skai.get_promo_heatmap(**heatmap_arguments)
+
+            # Retry the opposite orientation before concluding that SKAI has no
+            # usable discount-depth buckets for this perimeter.
+            if (
+                "discount_depth"
+                in {
+                    heatmap_arguments.get("x_dim_kind"),
+                    heatmap_arguments.get("y_dim_kind"),
+                }
+                and not self._has_usable_discount_depth(result)
+            ):
+                swapped_arguments = {
+                    **heatmap_arguments,
+                    "x_dim_kind": heatmap_arguments.get("y_dim_kind"),
+                    "y_dim_kind": heatmap_arguments.get("x_dim_kind"),
+                }
+                swapped_result = self.skai.get_promo_heatmap(**swapped_arguments)
+                if self._has_usable_discount_depth(swapped_result):
+                    return swapped_result
+                result["discount_depth_diagnostic"] = {
+                    "retried_with_axes_swapped": True,
+                    "usable_depth_brackets": False,
+                }
+            return result
         if tool == "get_market_landscape":
             allowed = {
                 "period_start", "period_end", "sku_ids", "brands", "categories",
