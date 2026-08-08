@@ -225,6 +225,11 @@ def render_hypotheses(agent, filter_values: dict) -> None:
     retailers = _filter_options(filter_values, "retailers", "retailer_groups")
     with st.container(border=True):
         st.caption("ANALYSIS SCOPE")
+        lever = st.selectbox(
+            "RGM lever",
+            ["Pricing", "Promo", "Trade terms", "Mix"],
+            key="hypothesis_lever",
+        )
         c1, c2, c3 = st.columns(3)
         brand = c1.selectbox("Brand", ["All brands", *brands], key="hypothesis_brand")
         sku = c2.selectbox("SKU", ["All SKUs", *skus], key="hypothesis_sku")
@@ -236,8 +241,19 @@ def render_hypotheses(agent, filter_values: dict) -> None:
             "currently supports brand and SKU scope."
         )
         run_scan = st.button(
-            "Generate hypotheses", type="primary", use_container_width=True
+            "Generate hypotheses",
+            type="primary",
+            use_container_width=True,
+            disabled=lever != "Pricing",
         )
+
+    if lever != "Pricing":
+        st.info(
+            f"{lever} hypothesis logic is not connected yet. This iteration "
+            "supports Pricing; the other levers are included to establish the "
+            "future workspace structure."
+        )
+        return
 
     if run_scan:
         with st.status(
@@ -257,6 +273,7 @@ def render_hypotheses(agent, filter_values: dict) -> None:
                 "brand": brand,
                 "sku": sku,
                 "retailer": retailer,
+                "lever": lever,
                 "summary": result.get("scope_summary", ""),
             }
             st.session_state.hypothesis_scan_limitations = result.get(
@@ -306,6 +323,7 @@ def render_hypotheses(agent, filter_values: dict) -> None:
                 f'{hypothesis_id} - PRIORITY {hypothesis.get("priority", 0)} - '
                 f'{hypothesis.get("evidence_status", "Mixed").upper()}'
             )
+            st.markdown(f'**Direction: {hypothesis.get("direction", "Pricing adjustment")}**')
             st.subheader(hypothesis.get("statement", "Pricing opportunity"))
             st.write(hypothesis.get("opportunity", ""))
             m1, m2, m3 = st.columns(3)

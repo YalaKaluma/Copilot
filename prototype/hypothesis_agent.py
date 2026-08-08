@@ -18,10 +18,13 @@ HYPOTHESIS_SCHEMA = {
         "data_limitations": {"type": "array", "items": {"type": "string"}},
         "hypotheses": {
             "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
             "items": {
                 "type": "object",
                 "properties": {
                     "id": {"type": "string"},
+                    "direction": {"type": "string", "enum": ["Increase price", "Decrease price"]},
                     "statement": {"type": "string"},
                     "opportunity": {"type": "string"},
                     "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
@@ -46,7 +49,7 @@ HYPOTHESIS_SCHEMA = {
                         },
                     },
                 },
-                "required": ["id", "statement", "opportunity", "confidence", "priority", "estimated_value", "value_basis", "evidence_status", "evidence"],
+                "required": ["id", "direction", "statement", "opportunity", "confidence", "priority", "estimated_value", "value_basis", "evidence_status", "evidence"],
                 "additionalProperties": False,
             },
         },
@@ -71,16 +74,23 @@ class PricingHypothesisAgent:
         # Keep competitive benchmarks in the ladder and landscape. Brand/SKU are
         # supplied as the analytical focus to the model, not used to erase peers.
         source_calls = {
-            "market_landscape": lambda: self.service.get_market_landscape(
-                split_by="brand", retailers=retailer_filter
+            "market_landscape_overall": lambda: self.service.get_market_landscape(
+                split_by="brand"
             ),
-            "brand_ladder": lambda: self.service.get_price_ladder(
-                retailers=retailer_filter
-            ),
+            "brand_ladder_overall": lambda: self.service.get_price_ladder(),
             "price_pack_curve": lambda: self.service.get_price_pack_curve(
                 brands=brand_filter, sku_ids=sku_filter
             ),
         }
+        if retailer:
+            source_calls["market_landscape_selected_retailer"] = (
+                lambda: self.service.get_market_landscape(
+                    split_by="brand", retailers=retailer_filter
+                )
+            )
+            source_calls["brand_ladder_selected_retailer"] = (
+                lambda: self.service.get_price_ladder(retailers=retailer_filter)
+            )
         raw: dict[str, Any] = {}
         errors: dict[str, str] = {}
         for source, call in source_calls.items():
@@ -124,11 +134,13 @@ class PricingHypothesisAgent:
                 {
                     "role": "system",
                     "content": (
-                        "You are a rigorous RGM pricing hypothesis agent. Identify 2-5 commercially distinct pricing opportunities from the supplied live SKAI data. "
-                        "Every hypothesis must contain both supporting evidence and counterevidence when the data allows it. Never invent elasticity, causality, willingness to pay, financial value, or missing fields. "
+                        "You are a rigorous RGM pricing hypothesis agent. Return exactly two directional hypotheses and no other commercial lever: H-PRICE-UP tests an INCREASE in price; H-PRICE-DOWN tests a DECREASE in price. "
+                        "Use pricing language only. Do not propose promotion mechanics, promotional frequency, trade terms, assortment, mix actions, or generic audits as the opportunity. "
+                        "Every hypothesis must contain supporting evidence and counterevidence when the data allows it. Weak or missing evidence should lower confidence, not create a different hypothesis. Never invent elasticity, causality, willingness to pay, financial value, or missing fields. "
+                        "Assess competitive price positioning versus SKUs/brands, growth patterns, share patterns, within-brand pack-price consistency, and differences between overall-market and selected-retailer results. "
                         "Use Market Landscape for share/growth/market price context, Brand Ladder for competitive average-price positioning, and Price Pack Curve for pack architecture. "
                         "Average prices can reflect pack and mix. Estimated value must be 'Not quantified' unless the payload directly supports a defensible value; explain the basis. "
-                        "Unavailable sources are explicitly listed in the payload. Treat each as a data limitation and never claim evidence from it. "
+                        "Unavailable or empty sources are data limitations and must never be cited as positive or negative proof. If selected SKU ownership is false or unverified, explicitly make that strong counterevidence for both actions. "
                         "Priority combines evidence confidence, potential materiality, and actionability. Findings must cite actual values from the payload."
                     ),
                 },
