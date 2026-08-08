@@ -15,17 +15,6 @@ import { ThemeProvider } from './shared/providers/ThemeProvider';
 import type { ConversationDetail } from './features/chat/types/chatHistory.types';
 import { chatHistoryService } from './features/chat/services/chatHistoryService';
 import { useChatHistory } from './features/chat/hooks/useChatHistory';
-import {
-  HypothesesPage,
-  HypothesisDetailPage,
-  OpportunitiesPage,
-  OpportunityDetailPage,
-  PricingWorkspaceLayout,
-  PricingWorkspaceProvider,
-  StoriesPage,
-  StoryDetailPage,
-  WorkspaceHomePage,
-} from './features/pricing-workspace/PricingWorkspace';
 
 function OrchestratorPageWrapper() {
   const { sessionId: routeSessionId } = useParams<{ sessionId?: string }>();
@@ -119,18 +108,7 @@ function AppContent() {
       <Routes>
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
-            <Route path="/" element={<Navigate to="/workspace/home" replace />} />
-            <Route element={<PricingWorkspaceProvider />}>
-              <Route element={<PricingWorkspaceLayout />}>
-                <Route path="/workspace/home" element={<WorkspaceHomePage />} />
-                <Route path="/workspace/hypotheses" element={<HypothesesPage />} />
-                <Route path="/workspace/hypotheses/:id" element={<HypothesisDetailPage />} />
-                <Route path="/workspace/opportunities" element={<OpportunitiesPage />} />
-                <Route path="/workspace/opportunities/:id" element={<OpportunityDetailPage />} />
-                <Route path="/workspace/sell-in-stories" element={<StoriesPage />} />
-                <Route path="/workspace/sell-in-stories/:id" element={<StoryDetailPage />} />
-              </Route>
-            </Route>
+            <Route path="/" element={<Navigate to="/chat" replace />} />
             <Route path="/chat" element={<OrchestratorPageWrapper />} />
             <Route path="/chat/projects" element={<ProjectsPage />} />
             <Route path="/chat/projects/:projectId" element={<ProjectDetailPage />} />
