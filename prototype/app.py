@@ -248,6 +248,12 @@ st.markdown(
         border-color: var(--sk-line);
         border-radius: 9px;
     }
+    [data-testid="stVerticalBlockBorderWrapper"]
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        background: #292830;
+        border-color: #48464f !important;
+        box-shadow: inset 3px 0 0 #5d5964;
+    }
     [data-testid="stAlert"] { border-radius: 9px; }
     [data-testid="stChatInput"] {
         background: #111015 !important;

@@ -228,3 +228,140 @@ def build_feedback_workbook(
     wb.save(output)
     return output.getvalue()
 
+
+def build_hypothesis_feedback_workbook(
+    hypotheses: list[dict[str, Any]],
+    *,
+    scope: dict[str, Any],
+    source_errors: dict[str, str],
+    raw_evidence: dict[str, Any],
+    tenant_code: str | None,
+    model: str,
+) -> bytes:
+    """Create a two-level review workbook for hypotheses and evidence cards."""
+    wb = Workbook()
+    instructions = wb.active
+    instructions.title = "Instructions"
+    hypothesis_review = wb.create_sheet("Hypothesis Review")
+    evidence_review = wb.create_sheet("Evidence Review")
+    source_status = wb.create_sheet("Source Status")
+
+    for sheet in wb.worksheets:
+        sheet.sheet_view.showGridLines = False
+
+    instructions.merge_cells("A1:F1")
+    instructions["A1"] = "SKAI Pricing Hypothesis - Feedback Workbook"
+    instructions["A1"].font = Font(size=18, bold=True, color=WHITE)
+    instructions["A1"].fill = PatternFill("solid", fgColor=INK)
+    instructions["A1"].alignment = Alignment(vertical="center")
+    instructions.row_dimensions[1].height = 34
+    guidance = [
+        ("Purpose", "Review the agent's pricing hypotheses and every supporting or counterevidence card."),
+        ("Hypothesis Review", "Rate whether each overall hypothesis is commercially sound, correctly scoped, and actionable."),
+        ("Evidence Review", "Review each evidence card independently. Check factual validity, relevance, direction, interpretation, and source use."),
+        ("Rating scale", "5 = correct and useful; 4 = good/minor edit; 3 = partly useful; 2 = materially flawed; 1 = incorrect or unusable."),
+        ("Suggested correction", "Where possible, describe the hypothesis or evidence interpretation the agent should have produced."),
+        ("Feedback loop", "Return the completed workbook so feedback can be translated into prompt, tool-routing, and analytical-guideline improvements."),
+        ("Tenant", tenant_code or "Default tenant"),
+        ("Model", model),
+        ("Scope", _safe_text(scope)),
+    ]
+    for row_index, (label, detail) in enumerate(guidance, start=3):
+        instructions.cell(row_index, 1, label)
+        instructions.cell(row_index, 2, detail)
+        instructions.cell(row_index, 1).font = Font(bold=True, color=BURGUNDY)
+        instructions.cell(row_index, 2).alignment = Alignment(wrap_text=True, vertical="top")
+    instructions.column_dimensions["A"].width = 24
+    instructions.column_dimensions["B"].width = 105
+
+    hypothesis_headers = [
+        "Hypothesis ID", "Lever", "Direction", "Statement", "Proposed opportunity",
+        "Evidence status", "Confidence", "Priority", "Estimated value", "Value basis",
+        "Brand", "SKU", "Retailer", "Overall rating (1-5)", "Reviewer decision",
+        "Hypothesis feedback", "Suggested corrected hypothesis", "Missing analysis",
+        "Review status",
+    ]
+    hypothesis_review.append(hypothesis_headers)
+    for index, hypothesis in enumerate(hypotheses, start=1):
+        hypothesis_review.append([
+            hypothesis.get("id") or f"H-{index}", scope.get("lever", "Pricing"),
+            hypothesis.get("direction"), hypothesis.get("statement"),
+            hypothesis.get("opportunity"), hypothesis.get("evidence_status"),
+            hypothesis.get("confidence"), hypothesis.get("priority"),
+            hypothesis.get("estimated_value"), hypothesis.get("value_basis"),
+            scope.get("brand"), scope.get("sku"), scope.get("retailer"),
+            "", "", "", "", "", "Not reviewed",
+        ])
+
+    evidence_headers = [
+        "Evidence ID", "Hypothesis ID", "Direction tested", "Evidence role",
+        "Finding", "Agent interpretation", "Strength", "Analytical source",
+        "Evidence scope", "Brand", "SKU", "Retailer", "Validity rating (1-5)",
+        "Relevance rating (1-5)", "Direction correct?", "Source used correctly?",
+        "Evidence feedback", "Corrected finding / interpretation", "Keep or remove",
+        "Review status",
+    ]
+    evidence_review.append(evidence_headers)
+    evidence_number = 0
+    for hypothesis_index, hypothesis in enumerate(hypotheses, start=1):
+        hypothesis_id = hypothesis.get("id") or f"H-{hypothesis_index}"
+        for evidence in hypothesis.get("evidence", []):
+            evidence_number += 1
+            evidence_review.append([
+                f"E-{evidence_number:04d}", hypothesis_id,
+                hypothesis.get("direction"), evidence.get("direction"),
+                evidence.get("finding"), evidence.get("interpretation"),
+                evidence.get("strength"), evidence.get("source"), evidence.get("scope"),
+                scope.get("brand"), scope.get("sku"), scope.get("retailer"),
+                "", "", "", "", "", "", "", "Not reviewed",
+            ])
+
+    source_status.append(["Source", "Status", "Error / limitation", "Raw response"])
+    for source in (
+        "market_landscape_overall", "market_landscape_selected_retailer",
+        "brand_ladder_overall", "brand_ladder_selected_retailer", "price_pack_curve",
+    ):
+        status = "Unavailable" if source in source_errors else "Available" if source in raw_evidence else "Not requested"
+        source_status.append([
+            source, status, source_errors.get(source, ""),
+            _safe_text(raw_evidence.get(source)),
+        ])
+
+    header_fill = PatternFill("solid", fgColor=INK)
+    editable_fill = PatternFill("solid", fgColor="FFF4D6")
+    thin = Side(style="thin", color=LINE)
+    for sheet, editable_start, widths in (
+        (hypothesis_review, 14, [16, 14, 18, 48, 55, 18, 12, 10, 18, 48, 20, 30, 22, 16, 20, 55, 55, 45, 18]),
+        (evidence_review, 14, [14, 16, 18, 20, 55, 62, 14, 24, 42, 20, 30, 22, 16, 18, 18, 22, 55, 60, 18, 18]),
+        (source_status, 99, [38, 16, 65, 100]),
+    ):
+        sheet.freeze_panes = "A2"
+        sheet.auto_filter.ref = f"A1:{chr(64 + len(widths))}{max(sheet.max_row, 2)}"
+        for cell in sheet[1]:
+            cell.fill = header_fill
+            cell.font = Font(bold=True, color=WHITE)
+            cell.alignment = Alignment(wrap_text=True, vertical="center")
+        for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row):
+            for cell in row:
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+                cell.border = Border(bottom=thin)
+                if cell.column >= editable_start:
+                    cell.fill = editable_fill
+            sheet.row_dimensions[row[0].row].height = 84
+        for column_index, width in enumerate(widths, start=1):
+            sheet.column_dimensions[chr(64 + column_index)].width = width
+
+    for sheet, validations in (
+        (hypothesis_review, [('"1,2,3,4,5"', "N"), ('"Accept,Revise,Reject,Need more evidence"', "O"), ('"Not reviewed,Reviewed,Action required"', "S")]),
+        (evidence_review, [('"1,2,3,4,5"', "M"), ('"1,2,3,4,5"', "N"), ('"Yes,Partly,No,Unclear"', "O"), ('"Yes,Partly,No,Unclear"', "P"), ('"Keep,Revise,Remove"', "S"), ('"Not reviewed,Reviewed,Action required"', "T")]),
+    ):
+        for formula, column in validations:
+            validation = DataValidation(
+                type="list", formula1=formula, allow_blank=True
+            )
+            sheet.add_data_validation(validation)
+            validation.add(f"{column}2:{column}{max(sheet.max_row, 1000)}")
+
+    output = BytesIO()
+    wb.save(output)
+    return output.getvalue()

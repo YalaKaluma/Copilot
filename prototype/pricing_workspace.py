@@ -7,6 +7,8 @@ from datetime import date
 
 import streamlit as st
 
+from feedback_export import build_hypothesis_feedback_workbook
+
 
 HYPOTHESES = [
     {
@@ -404,6 +406,23 @@ def render_hypotheses(agent, filter_values: dict) -> None:
 
     with st.expander("Raw SKAI evidence used by the hypothesis agent"):
         st.json(st.session_state.hypothesis_raw_evidence)
+
+    workbook = build_hypothesis_feedback_workbook(
+        hypotheses,
+        scope=scope,
+        source_errors=st.session_state.hypothesis_source_errors,
+        raw_evidence=st.session_state.hypothesis_raw_evidence,
+        tenant_code=st.session_state.get("selected_tenant_code"),
+        model=st.session_state.get("workspace_model", ""),
+    )
+    st.download_button(
+        "Download hypothesis & evidence feedback workbook",
+        data=workbook,
+        file_name=f"pricing_hypothesis_feedback_{date.today():%Y%m%d}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        type="primary",
+        use_container_width=True,
+    )
 
 
 def render_opportunities() -> None:
