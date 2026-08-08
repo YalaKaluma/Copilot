@@ -97,7 +97,7 @@ def render_home(connected: bool, tenant: str | None) -> None:
         st.subheader("Workspace status")
         st.success("SKAI data connected" if connected else "SKAI connection required")
         st.info("OpenAI configured" if bool(st.session_state.get("workspace_openai_key")) else "OpenAI key is available in Connection settings")
-        st.caption("Credentials, API settings and workspace selection remain in the sidebar.")
+        st.caption("Credentials, API settings and workspace selection are managed on the Connection page.")
     with right:
         st.subheader("Current analysis scope")
         scope = {

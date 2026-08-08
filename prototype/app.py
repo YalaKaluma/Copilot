@@ -84,6 +84,25 @@ st.markdown(
         text-transform: uppercase;
         margin-top: 1.25rem;
     }
+    [data-testid="stSidebar"] .stButton > button {
+        justify-content: flex-start;
+        min-height: 2.65rem;
+        color: var(--sk-muted);
+        background: transparent;
+        border: 0;
+        border-radius: 7px;
+        padding-left: .8rem;
+        box-shadow: none;
+    }
+    [data-testid="stSidebar"] .stButton > button:hover {
+        color: var(--sk-ink);
+        background: #1b1920;
+    }
+    [data-testid="stSidebar"] .stButton > button[kind="primary"] {
+        color: #fff;
+        background: #311723;
+        border-left: 3px solid var(--sk-magenta);
+    }
     h1, h2, h3, p, label, .stMarkdown { color: var(--sk-ink); }
 
     .sk-brand {
@@ -323,6 +342,25 @@ if "skai_token" not in st.session_state:
             st.session_state["auto_login_error"] = str(exc)
 
 initialize_workspace()
+st.session_state.setdefault("workspace_page", "Home")
+st.session_state.setdefault("workspace_openai_key", os.getenv("OPENAI_API_KEY", ""))
+st.session_state.setdefault("workspace_model", os.getenv("OPENAI_MODEL", "gpt-5.6"))
+st.session_state.setdefault("workspace_show_raw", False)
+
+skai_url = os.getenv("SKAI_API_URL", "")
+openai_key = st.session_state.workspace_openai_key
+model = st.session_state.workspace_model
+show_raw = st.session_state.workspace_show_raw
+tenant_codes = st.session_state.get("tenant_codes", [])
+if tenant_codes:
+    configured_tenant = os.getenv("SKAI_TENANT_CODE", "akzonobel")
+    if st.session_state.get("tenant_code") not in tenant_codes:
+        st.session_state["tenant_code"] = (
+            configured_tenant if configured_tenant in tenant_codes else tenant_codes[0]
+        )
+    tenant_code = st.session_state["tenant_code"]
+else:
+    tenant_code = None
 
 with st.sidebar:
     st.markdown(
@@ -334,52 +372,56 @@ with st.sidebar:
         """,
         unsafe_allow_html=True,
     )
-    page = st.radio(
-        "Workspace navigation",
-        ["Home", "Copilot", "Hypotheses", "Opportunities", "Sell-in Stories"],
-        key="workspace_page",
-        label_visibility="collapsed",
-    )
+    st.caption("PRICING WORKSPACE")
+    navigation = [
+        ("⌂  Home", "Home"),
+        ("✦  Copilot", "Copilot"),
+        ("◇  Hypotheses", "Hypotheses"),
+        ("◎  Opportunities", "Opportunities"),
+        ("▤  Sell-in Stories", "Sell-in Stories"),
+        ("⚙  Connection", "Connection"),
+    ]
+    for label, destination in navigation:
+        if st.button(
+            label,
+            key=f"nav-{destination}",
+            type="primary" if st.session_state.workspace_page == destination else "secondary",
+            use_container_width=True,
+        ):
+            st.session_state.workspace_page = destination
+            st.rerun()
     st.divider()
-    st.header("Connection")
-    skai_url = os.getenv("SKAI_API_URL", "")
-    skai_username = st.text_input(
-        "SKAI username", value=os.getenv("SKAI_USERNAME", "")
-    )
-    skai_password = st.text_input(
-        "SKAI password", value=os.getenv("SKAI_PASSWORD", ""), type="password"
-    )
-    openai_key = st.text_input(
-        "OpenAI API key", value=os.getenv("OPENAI_API_KEY", ""), type="password"
-    )
-    st.session_state["workspace_openai_key"] = openai_key
-    model = st.text_input("Model", value=os.getenv("OPENAI_MODEL", "gpt-5.6"))
-    show_raw = st.toggle("Show raw SKAI response", value=False)
-
-    tenant_codes = st.session_state.get("tenant_codes", [])
-    if tenant_codes:
-        configured_tenant = os.getenv("SKAI_TENANT_CODE", "akzonobel")
-        if st.session_state.get("tenant_code") not in tenant_codes:
-            st.session_state["tenant_code"] = (
-                configured_tenant
-                if configured_tenant in tenant_codes
-                else tenant_codes[0]
-            )
-        tenant_code = st.selectbox(
-            "SKAI workspace",
-            options=tenant_codes,
-            key="tenant_code",
-            format_func=lambda code: code.replace("_", " ").title(),
-        )
+    if st.session_state.get("skai_token"):
+        st.success(f"Connected · {(tenant_code or 'workspace').replace('_', ' ').title()}")
     else:
-        tenant_code = None
+        st.caption("SKAI not connected")
 
+page = st.session_state.workspace_page
+
+if page == "Connection":
+    st.markdown('<p class="sk-eyebrow">Workspace settings</p><h1>Connection</h1><p class="sk-subtitle">Manage SKAI authentication, workspace scope and model configuration.</p>', unsafe_allow_html=True)
+    left, right = st.columns([1.15, .85])
+    with left:
+        st.subheader("Credentials")
+        skai_username = st.text_input("SKAI username", value=os.getenv("SKAI_USERNAME", ""))
+        skai_password = st.text_input("SKAI password", value=os.getenv("SKAI_PASSWORD", ""), type="password")
+        openai_key = st.text_input("OpenAI API key", value=st.session_state.workspace_openai_key, type="password")
+        st.session_state.workspace_openai_key = openai_key
+    with right:
+        st.subheader("Analysis configuration")
+        model = st.text_input("Model", value=st.session_state.workspace_model)
+        st.session_state.workspace_model = model
+        show_raw = st.toggle("Show raw SKAI response", value=st.session_state.workspace_show_raw)
+        st.session_state.workspace_show_raw = show_raw
+        if tenant_codes:
+            tenant_code = st.selectbox("SKAI workspace", options=tenant_codes, key="tenant_code", format_func=lambda code: code.replace("_", " ").title())
+        else:
+            st.text_input("SKAI workspace", value="Connect to load available workspaces", disabled=True)
     if st.session_state.get("auto_login_error"):
         st.warning(f"Automatic SKAI login failed: {st.session_state['auto_login_error']}")
     elif st.session_state.get("skai_token"):
         st.success("Connected to SKAI")
-
-    if st.button("Reconnect and test", use_container_width=True):
+    if st.button("Reconnect and test", type="primary", use_container_width=True, key="connection-test"):
         if not all(_cognito_settings()):
             st.error("Complete the three SKAI Cognito settings in .env.")
         elif not (skai_username and skai_password):
@@ -406,6 +448,7 @@ with st.sidebar:
                     st.rerun()
             except (SkaiAuthError, SkaiError) as exc:
                 st.error(str(exc))
+    st.stop()
 
 if page == "Home":
     render_home(bool(st.session_state.get("skai_token")), tenant_code)
