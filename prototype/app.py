@@ -13,6 +13,7 @@ from openai import OpenAI
 
 from agent import SkaiAgent
 from feedback_export import build_feedback_workbook
+from hypothesis_agent import PricingHypothesisAgent
 from orchestrator import Orchestrator
 from pricing_workspace import (
     initialize_workspace,
@@ -454,7 +455,34 @@ if page == "Home":
     render_home(bool(st.session_state.get("skai_token")), tenant_code)
     st.stop()
 if page == "Hypotheses":
-    render_hypotheses()
+    if not st.session_state.get("skai_token"):
+        st.error("Connect to SKAI on the Connection page before running hypotheses.")
+        st.stop()
+    if not openai_key:
+        st.error("Add the OpenAI API key on the Connection page first.")
+        st.stop()
+    hypothesis_service = SkaiGrowthService(
+        skai_url,
+        market_base_url=os.getenv("SKAI_MARKET_API_URL") or None,
+        tenant_code=tenant_code,
+        token=st.session_state["skai_token"],
+        origin=os.getenv("SKAI_API_ORIGIN") or None,
+        referer=os.getenv("SKAI_API_REFERER") or None,
+    )
+    try:
+        cache_key = f"filter_values:{tenant_code or 'default'}"
+        hypothesis_filters = st.session_state.get(cache_key)
+        if hypothesis_filters is None:
+            hypothesis_filters = hypothesis_service.get_filter_values()
+            st.session_state[cache_key] = hypothesis_filters
+        hypothesis_agent = PricingHypothesisAgent(
+            hypothesis_service, OpenAI(api_key=openai_key), model
+        )
+        render_hypotheses(hypothesis_agent, hypothesis_filters)
+    except Exception as exc:
+        st.error(f"Could not generate pricing hypotheses: {exc}")
+    finally:
+        hypothesis_service.close()
     st.stop()
 if page == "Opportunities":
     render_opportunities()

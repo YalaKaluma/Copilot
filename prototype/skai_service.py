@@ -134,6 +134,20 @@ class SkaiGrowthService:
             market_api=True,
         )
 
+    def get_price_pack_curve(self, **filters: Any) -> dict[str, Any]:
+        """Return pack-size price architecture, gaps, and competitive clusters."""
+        params = {
+            key: value
+            for key, value in filters.items()
+            if value is not None and value != [] and value != ""
+        }
+        return self._request(
+            "GET",
+            "/api/v1/pricing/price-pack-curve",
+            params=params,
+            market_api=True,
+        )
+
     def get_simulator_base(self, **filters: Any) -> dict[str, Any]:
         """Return the SKU/product IDs and current values required to simulate."""
         params = {

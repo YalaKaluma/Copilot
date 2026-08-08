@@ -65,6 +65,10 @@ def initialize_workspace() -> None:
     st.session_state.setdefault("hypothesis_detail", None)
     st.session_state.setdefault("opportunity_detail", None)
     st.session_state.setdefault("story_detail", None)
+    st.session_state.setdefault("generated_hypotheses", [])
+    st.session_state.setdefault("hypothesis_scan_scope", {})
+    st.session_state.setdefault("hypothesis_scan_limitations", [])
+    st.session_state.setdefault("hypothesis_raw_evidence", {})
 
 
 def _header(title: str, subtitle: str, eyebrow: str = "Pricing decision workspace") -> None:
@@ -81,9 +85,16 @@ def _card_end() -> None:
 
 def render_home(connected: bool, tenant: str | None) -> None:
     _header("Pricing workspace", "Your agent-led path from commercial hypothesis to customer-ready action.")
-    hypotheses_review = sum(st.session_state.pricing_dispositions.get(h["id"], "Review") == "Review" for h in HYPOTHESES)
+    live_hypotheses = st.session_state.get("generated_hypotheses", [])
+    hypotheses_review = sum(
+        st.session_state.pricing_dispositions.get(
+            hypothesis.get("id", f"LIVE-{index + 1}"), "Review"
+        )
+        == "Review"
+        for index, hypothesis in enumerate(live_hypotheses)
+    )
     metrics = [
-        ("Hypotheses tested", len(HYPOTHESES)), ("Requiring review", hypotheses_review),
+        ("Hypotheses tested", len(live_hypotheses)), ("Requiring review", hypotheses_review),
         ("Active opportunities", len(st.session_state.pricing_opportunities)),
         ("Recommendations ready", sum(o["status"] == "Recommendation ready" for o in st.session_state.pricing_opportunities.values())),
         ("Sell-in stories", len(st.session_state.sell_in_stories)),
@@ -174,6 +185,200 @@ def _render_hypothesis_detail(h: dict) -> None:
             st.success("Disposition saved.")
 
 
+def _filter_options(filter_values: dict, *keys: str) -> list[str]:
+    catalog = filter_values.get("filters", filter_values)
+    if not isinstance(catalog, dict):
+        return []
+    for key in keys:
+        values = catalog.get(key)
+        if not isinstance(values, list):
+            continue
+        options: list[str] = []
+        for value in values:
+            if isinstance(value, dict):
+                resolved = next(
+                    (
+                        value.get(candidate)
+                        for candidate in ("id", "value", "code", "name", "label")
+                        if value.get(candidate) is not None
+                    ),
+                    None,
+                )
+            else:
+                resolved = value
+            if resolved is not None and str(resolved) not in options:
+                options.append(str(resolved))
+        if options:
+            return options
+    return []
+
+
+def render_hypotheses(agent, filter_values: dict) -> None:
+    """Run and review live, scope-specific pricing hypotheses."""
+    _header(
+        "Pricing hypotheses",
+        "Select a commercial scope and ask the agent to find evidence-backed pricing opportunities.",
+    )
+    brands = _filter_options(filter_values, "brands")
+    skus = _filter_options(filter_values, "sku_ids", "skus")
+    retailers = _filter_options(filter_values, "retailers", "retailer_groups")
+    with st.container(border=True):
+        st.caption("ANALYSIS SCOPE")
+        c1, c2, c3 = st.columns(3)
+        brand = c1.selectbox("Brand", ["All brands", *brands], key="hypothesis_brand")
+        sku = c2.selectbox("SKU", ["All SKUs", *skus], key="hypothesis_sku")
+        retailer = c3.selectbox(
+            "Retailer", ["All retailers", *retailers], key="hypothesis_retailer"
+        )
+        st.caption(
+            "Retailer filters Market Landscape and Brand Ladder. Price Pack Curve "
+            "currently supports brand and SKU scope."
+        )
+        run_scan = st.button(
+            "Find pricing opportunities", type="primary", use_container_width=True
+        )
+
+    if run_scan:
+        with st.status(
+            "Collecting SKAI evidence and testing pricing hypotheses...",
+            expanded=True,
+        ) as status:
+            st.write("Reading Market Landscape")
+            st.write("Reading Brand Ladder")
+            st.write("Reading Price Pack Curve")
+            result, raw = agent.investigate(
+                brand=None if brand == "All brands" else brand,
+                sku_id=None if sku == "All SKUs" else sku,
+                retailer=None if retailer == "All retailers" else retailer,
+            )
+            st.session_state.generated_hypotheses = result.get("hypotheses", [])
+            st.session_state.hypothesis_scan_scope = {
+                "brand": brand,
+                "sku": sku,
+                "retailer": retailer,
+                "summary": result.get("scope_summary", ""),
+            }
+            st.session_state.hypothesis_scan_limitations = result.get(
+                "data_limitations", []
+            )
+            st.session_state.hypothesis_raw_evidence = raw
+            status.update(
+                label="Pricing opportunity scan complete",
+                state="complete",
+                expanded=False,
+            )
+
+    hypotheses = sorted(
+        st.session_state.generated_hypotheses,
+        key=lambda item: item.get("priority", 0),
+        reverse=True,
+    )
+    if not hypotheses:
+        st.info("Choose a scope and run the first live pricing opportunity scan.")
+        return
+
+    scope = st.session_state.hypothesis_scan_scope
+    st.caption(
+        f'LAST SCAN - {scope.get("brand")} - {scope.get("sku")} - '
+        f'{scope.get("retailer")}'
+    )
+    if scope.get("summary"):
+        st.write(scope["summary"])
+    for limitation in st.session_state.hypothesis_scan_limitations:
+        st.warning(limitation)
+
+    for index, hypothesis in enumerate(hypotheses):
+        hypothesis_id = hypothesis.get("id") or f"LIVE-{index + 1}"
+        disposition = st.session_state.pricing_dispositions.get(
+            hypothesis_id, "Review"
+        )
+        with st.container(border=True):
+            st.caption(
+                f'{hypothesis_id} - PRIORITY {hypothesis.get("priority", 0)} - '
+                f'{hypothesis.get("evidence_status", "Mixed").upper()}'
+            )
+            st.subheader(hypothesis.get("statement", "Pricing opportunity"))
+            st.write(hypothesis.get("opportunity", ""))
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Confidence", f'{hypothesis.get("confidence", 0)}%')
+            m2.metric(
+                "Estimated value",
+                hypothesis.get("estimated_value", "Not quantified"),
+            )
+            m3.metric("Decision", disposition)
+            st.caption(
+                f'Value basis: {hypothesis.get("value_basis", "Not provided")}'
+            )
+
+            evidence = hypothesis.get("evidence", [])
+            supporting = [
+                item for item in evidence if item.get("direction") == "Support"
+            ]
+            opposing = [
+                item
+                for item in evidence
+                if item.get("direction") == "Counterevidence"
+            ]
+            support_col, counter_col = st.columns(2)
+            for column, title, cards in (
+                (support_col, "Supporting evidence", supporting),
+                (counter_col, "Counterevidence", opposing),
+            ):
+                with column:
+                    st.markdown(f"**{title}**")
+                    if not cards:
+                        st.caption("No evidence card returned for this side.")
+                    for evidence_card in cards:
+                        with st.container(border=True):
+                            strength = str(evidence_card.get("strength", "")).upper()
+                            source = evidence_card.get("source", "")
+                            st.caption(f"{strength} - {source}")
+                            st.markdown(
+                                f'**{evidence_card.get("finding", "Finding")}**'
+                            )
+                            st.write(evidence_card.get("interpretation", ""))
+                            st.caption(evidence_card.get("scope", ""))
+
+            accept, reject, _ = st.columns([1, 1, 3])
+            if accept.button(
+                "Accept opportunity",
+                key=f"accept-{hypothesis_id}",
+                type="primary",
+                use_container_width=True,
+            ):
+                st.session_state.pricing_dispositions[hypothesis_id] = "Accepted"
+                opportunity_id = f"O-LIVE-{index + 1}"
+                st.session_state.pricing_opportunities[opportunity_id] = {
+                    "id": opportunity_id,
+                    "hypothesis_id": hypothesis_id,
+                    "statement": hypothesis.get("opportunity")
+                    or hypothesis.get("statement"),
+                    "hypothesis": deepcopy(hypothesis),
+                    "value": hypothesis.get("estimated_value", "Not quantified"),
+                    "evidence": deepcopy(evidence),
+                    "scope": deepcopy(scope),
+                    "status": "Recommendation ready",
+                    "owner": "Pricing team",
+                    "objective": "Margin",
+                    "max_volume_loss": "1.5%",
+                    "minimum_margin": "To be defined",
+                    "protected": "Entry-price pack",
+                    "excluded": "None",
+                    "timing": "Next list-price window",
+                    "selected": "Balanced",
+                    "scenarios": deepcopy(SCENARIOS),
+                }
+                st.rerun()
+            if reject.button(
+                "Reject", key=f"reject-{hypothesis_id}", use_container_width=True
+            ):
+                st.session_state.pricing_dispositions[hypothesis_id] = "Rejected"
+                st.rerun()
+
+    with st.expander("Raw SKAI evidence used by the hypothesis agent"):
+        st.json(st.session_state.hypothesis_raw_evidence)
+
+
 def render_opportunities() -> None:
     selected = st.session_state.opportunity_detail
     if selected and selected in st.session_state.pricing_opportunities:
@@ -261,14 +466,40 @@ def _render_story(story: dict) -> None:
         st.session_state.story_detail = None
         st.rerun()
     opp = st.session_state.pricing_opportunities[story["opportunity_id"]]
-    hypothesis = next(h for h in HYPOTHESES if h["id"] == opp["hypothesis_id"])
+    hypothesis = opp.get("hypothesis") or next(
+        h for h in HYPOTHESES if h["id"] == opp["hypothesis_id"]
+    )
     scenario = story["scenario"]
+    if opp.get("hypothesis"):
+        scope = opp.get("scope", {})
+        context = ", ".join(
+            str(scope.get(key)) for key in ("brand", "sku", "retailer")
+            if scope.get(key)
+        )
+        support_findings = "; ".join(
+            item.get("finding", "")
+            for item in hypothesis.get("evidence", [])
+            if item.get("direction") == "Support"
+        )
+        counter_findings = "; ".join(
+            item.get("finding", "")
+            for item in hypothesis.get("evidence", [])
+            if item.get("direction") == "Counterevidence"
+        )
+    else:
+        context = f'{hypothesis["scope"]}, {hypothesis["period"]}'
+        support_findings = "; ".join(
+            item[0] for item in hypothesis["evidence"] if item[2] == "Supports"
+        )
+        counter_findings = "; ".join(
+            item[0] for item in hypothesis["evidence"] if item[2] != "Supports"
+        )
     _header("Customer pricing story", "A traceable narrative ready for decision and retailer sell-in.", story["id"])
     sections = [
-        ("1. Business context", f'{hypothesis["scope"]}, {hypothesis["period"]}. The objective is {opp["objective"].lower()} growth within a maximum {opp["max_volume_loss"]} volume decline.'),
+        ("1. Business context", f'{context}. The objective is {opp["objective"].lower()} growth within a maximum {opp["max_volume_loss"]} volume decline.'),
         ("2. Pricing hypothesis", hypothesis["statement"]),
-        ("3. Evidence", "; ".join(e[0] for e in hypothesis["evidence"] if e[2] == "Supports")),
-        ("4. Counterevidence", "; ".join(e[0] for e in hypothesis["evidence"] if e[2] != "Supports")),
+        ("3. Evidence", support_findings),
+        ("4. Counterevidence", counter_findings),
         ("5. Confirmed opportunity", f'{opp["statement"]} Estimated value: {opp["value"]}.'),
         ("6. Scenarios considered", ", ".join(s["name"] for s in opp["scenarios"])),
         ("7. Recommended action", scenario["action"]),

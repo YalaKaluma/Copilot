@@ -7,6 +7,12 @@ the plan's `brands` list. The execution layer retrieves the full competitive
 ladder and uses the brand list as the analytical focus rather than filtering
 away its benchmark.
 
+`get_price_pack_curve` calls `GET /api/v1/pricing/price-pack-curve`. It supports
+brand, SKU, and pack-size-range filters. It returns price by pack-size evidence
+for architecture gaps, trade-up coherence, competitive clustering, and outlier
+SKUs. The endpoint does not currently accept a retailer filter; do not describe
+its evidence as retailer-specific.
+
 `get_simulator_base` calls `GET /api/v1/pricing/simulator/base`. Use it to inspect
 available simulator products and current prices.
 
