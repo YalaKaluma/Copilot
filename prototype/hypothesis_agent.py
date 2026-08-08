@@ -8,7 +8,7 @@ from typing import Any
 
 from openai import OpenAI
 
-from skai_service import SkaiGrowthService
+from skai_service import SkaiError, SkaiGrowthService
 
 
 HYPOTHESIS_SCHEMA = {
@@ -70,21 +70,36 @@ class PricingHypothesisAgent:
 
         # Keep competitive benchmarks in the ladder and landscape. Brand/SKU are
         # supplied as the analytical focus to the model, not used to erase peers.
-        raw = {
-            "market_landscape": self.service.get_market_landscape(
+        source_calls = {
+            "market_landscape": lambda: self.service.get_market_landscape(
                 split_by="brand", retailers=retailer_filter
             ),
-            "brand_ladder": self.service.get_price_ladder(
+            "brand_ladder": lambda: self.service.get_price_ladder(
                 retailers=retailer_filter
             ),
-            "price_pack_curve": self.service.get_price_pack_curve(
+            "price_pack_curve": lambda: self.service.get_price_pack_curve(
                 brands=brand_filter, sku_ids=sku_filter
             ),
         }
+        raw: dict[str, Any] = {}
+        errors: dict[str, str] = {}
+        for source, call in source_calls.items():
+            try:
+                raw[source] = call()
+            except SkaiError as exc:
+                errors[source] = str(exc)
+        if not raw:
+            joined = "; ".join(f"{source}: {error}" for source, error in errors.items())
+            raise SkaiError(f"No pricing evidence source was available. {joined}")
+        if errors:
+            raw["source_errors"] = errors
         compact = {
             key: self._compact(value)
             for key, value in raw.items()
+            if key != "source_errors"
         }
+        if errors:
+            compact["unavailable_sources"] = errors
         scope = {
             "brand": brand or "All brands",
             "sku_id": sku_id or "All SKUs",
@@ -104,6 +119,7 @@ class PricingHypothesisAgent:
                         "Every hypothesis must contain both supporting evidence and counterevidence when the data allows it. Never invent elasticity, causality, willingness to pay, financial value, or missing fields. "
                         "Use Market Landscape for share/growth/market price context, Brand Ladder for competitive average-price positioning, and Price Pack Curve for pack architecture. "
                         "Average prices can reflect pack and mix. Estimated value must be 'Not quantified' unless the payload directly supports a defensible value; explain the basis. "
+                        "Unavailable sources are explicitly listed in the payload. Treat each as a data limitation and never claim evidence from it. "
                         "Priority combines evidence confidence, potential materiality, and actionability. Findings must cite actual values from the payload."
                     ),
                 },

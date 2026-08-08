@@ -69,6 +69,7 @@ def initialize_workspace() -> None:
     st.session_state.setdefault("hypothesis_scan_scope", {})
     st.session_state.setdefault("hypothesis_scan_limitations", [])
     st.session_state.setdefault("hypothesis_raw_evidence", {})
+    st.session_state.setdefault("hypothesis_source_errors", {})
 
 
 def _header(title: str, subtitle: str, eyebrow: str = "Pricing decision workspace") -> None:
@@ -262,6 +263,9 @@ def render_hypotheses(agent, filter_values: dict) -> None:
                 "data_limitations", []
             )
             st.session_state.hypothesis_raw_evidence = raw
+            st.session_state.hypothesis_source_errors = raw.get(
+                "source_errors", {}
+            )
             status.update(
                 label="Pricing opportunity scan complete",
                 state="complete",
@@ -286,6 +290,11 @@ def render_hypotheses(agent, filter_values: dict) -> None:
         st.write(scope["summary"])
     for limitation in st.session_state.hypothesis_scan_limitations:
         st.warning(limitation)
+    for source, error in st.session_state.hypothesis_source_errors.items():
+        st.warning(
+            f'{source.replace("_", " ").title()} was unavailable; the scan '
+            f'continued with the remaining sources. {error}'
+        )
 
     for index, hypothesis in enumerate(hypotheses):
         hypothesis_id = hypothesis.get("id") or f"LIVE-{index + 1}"

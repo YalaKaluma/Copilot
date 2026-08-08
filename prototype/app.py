@@ -327,7 +327,15 @@ def _store_login(username: str, password: str) -> None:
         raise SkaiAuthError("Complete the three SKAI Cognito settings in .env.")
     token = CognitoSrpAuthenticator(*settings).authenticate(username, password)
     st.session_state["skai_token"] = token
-    st.session_state["tenant_codes"] = tenant_codes_from_token(token)
+    tenant_codes = tenant_codes_from_token(token)
+    st.session_state["tenant_codes"] = tenant_codes
+    configured_tenant = os.getenv("SKAI_TENANT_CODE", "akzonobel")
+    if st.session_state.get("selected_tenant_code") not in tenant_codes:
+        st.session_state["selected_tenant_code"] = (
+            configured_tenant if configured_tenant in tenant_codes else tenant_codes[0]
+            if tenant_codes
+            else None
+        )
 
 
 # When credentials are stored locally, connect once per Streamlit session so the
@@ -355,11 +363,11 @@ show_raw = st.session_state.workspace_show_raw
 tenant_codes = st.session_state.get("tenant_codes", [])
 if tenant_codes:
     configured_tenant = os.getenv("SKAI_TENANT_CODE", "akzonobel")
-    if st.session_state.get("tenant_code") not in tenant_codes:
-        st.session_state["tenant_code"] = (
+    if st.session_state.get("selected_tenant_code") not in tenant_codes:
+        st.session_state["selected_tenant_code"] = (
             configured_tenant if configured_tenant in tenant_codes else tenant_codes[0]
         )
-    tenant_code = st.session_state["tenant_code"]
+    tenant_code = st.session_state["selected_tenant_code"]
 else:
     tenant_code = None
 
@@ -415,7 +423,14 @@ if page == "Connection":
         show_raw = st.toggle("Show raw SKAI response", value=st.session_state.workspace_show_raw)
         st.session_state.workspace_show_raw = show_raw
         if tenant_codes:
-            tenant_code = st.selectbox("SKAI workspace", options=tenant_codes, key="tenant_code", format_func=lambda code: code.replace("_", " ").title())
+            tenant_code = st.selectbox(
+                "SKAI workspace",
+                options=tenant_codes,
+                index=tenant_codes.index(st.session_state["selected_tenant_code"]),
+                key="connection_tenant_picker",
+                format_func=lambda code: code.replace("_", " ").title(),
+            )
+            st.session_state["selected_tenant_code"] = tenant_code
         else:
             st.text_input("SKAI workspace", value="Connect to load available workspaces", disabled=True)
     if st.session_state.get("auto_login_error"):
@@ -445,8 +460,7 @@ if page == "Connection":
                 st.session_state[cache_key] = filters
                 st.session_state.pop("auto_login_error", None)
                 st.success("Connected to SKAI.")
-                if tenant_code is None and st.session_state["tenant_codes"]:
-                    st.rerun()
+                st.rerun()
             except (SkaiAuthError, SkaiError) as exc:
                 st.error(str(exc))
     st.stop()
