@@ -7,6 +7,14 @@ This folder extracts the smallest useful slice of the full copilot:
 3. `orchestrator.py` converts a question into a visible, structured plan.
 4. `agent.py` executes the plan and produces an evidence-grounded answer.
 5. `app.py` provides the Streamlit chat UI.
+6. `pricing_workspace.py` adds the pricing decision workspace around the unchanged
+   Copilot flow: Home, Hypotheses, Opportunities, and Sell-in Stories.
+
+The pricing workspace uses realistic in-session mock hypotheses and scenario
+results where a live analytical capability is not yet connected. Pursuing a
+hypothesis creates a traceable opportunity; approving a scenario creates a
+sell-in story. The pricing simulator remains behind the experience rather than
+being exposed as a user-operated screen.
 
 The prototype supports `GET /api/v1/promo/heatmap`,
 `GET /api/v1/pricing/market-landscape`, `GET /api/v1/pricing/brand-ladder`,

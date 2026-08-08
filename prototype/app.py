@@ -14,6 +14,13 @@ from openai import OpenAI
 from agent import SkaiAgent
 from feedback_export import build_feedback_workbook
 from orchestrator import Orchestrator
+from pricing_workspace import (
+    initialize_workspace,
+    render_home,
+    render_hypotheses,
+    render_opportunities,
+    render_stories,
+)
 from skai_auth import CognitoSrpAuthenticator, SkaiAuthError, tenant_codes_from_token
 from skai_service import SkaiError, SkaiGrowthService
 
@@ -141,6 +148,15 @@ st.markdown(
         text-transform: uppercase;
         white-space: nowrap;
     }
+    .sk-eyebrow {
+        color: #e477a3 !important;
+        font-size: .72rem;
+        font-weight: 750;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        margin: 0 0 .35rem;
+    }
+    .sk-subtitle { color: var(--sk-muted) !important; margin: -.4rem 0 1.6rem; }
 
     [data-testid="stTextInput"] input,
     [data-baseweb="select"] > div {
@@ -272,13 +288,6 @@ st.markdown(
         [data-testid="stMainBlockContainer"] { padding-top: 1.2rem; }
     }
     </style>
-    <div class="sk-main-header">
-      <div>
-        <h1>Growth Copilot</h1>
-        <p>Ask a commercial question, inspect the plan, and run it on SKAI.</p>
-      </div>
-      <span class="sk-pill">Analytics prototype</span>
-    </div>
     """,
     unsafe_allow_html=True,
 )
@@ -313,6 +322,8 @@ if "skai_token" not in st.session_state:
         except Exception as exc:
             st.session_state["auto_login_error"] = str(exc)
 
+initialize_workspace()
+
 with st.sidebar:
     st.markdown(
         """
@@ -323,6 +334,13 @@ with st.sidebar:
         """,
         unsafe_allow_html=True,
     )
+    page = st.radio(
+        "Workspace navigation",
+        ["Home", "Copilot", "Hypotheses", "Opportunities", "Sell-in Stories"],
+        key="workspace_page",
+        label_visibility="collapsed",
+    )
+    st.divider()
     st.header("Connection")
     skai_url = os.getenv("SKAI_API_URL", "")
     skai_username = st.text_input(
@@ -334,6 +352,7 @@ with st.sidebar:
     openai_key = st.text_input(
         "OpenAI API key", value=os.getenv("OPENAI_API_KEY", ""), type="password"
     )
+    st.session_state["workspace_openai_key"] = openai_key
     model = st.text_input("Model", value=os.getenv("OPENAI_MODEL", "gpt-5.6"))
     show_raw = st.toggle("Show raw SKAI response", value=False)
 
@@ -387,6 +406,32 @@ with st.sidebar:
                     st.rerun()
             except (SkaiAuthError, SkaiError) as exc:
                 st.error(str(exc))
+
+if page == "Home":
+    render_home(bool(st.session_state.get("skai_token")), tenant_code)
+    st.stop()
+if page == "Hypotheses":
+    render_hypotheses()
+    st.stop()
+if page == "Opportunities":
+    render_opportunities()
+    st.stop()
+if page == "Sell-in Stories":
+    render_stories()
+    st.stop()
+
+st.markdown(
+    """
+    <div class="sk-main-header">
+      <div>
+        <h1>Growth Copilot</h1>
+        <p>Ask a commercial question, inspect the plan, and run it on SKAI.</p>
+      </div>
+      <span class="sk-pill">Analytics prototype</span>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
