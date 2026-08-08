@@ -218,7 +218,7 @@ def render_hypotheses(agent, filter_values: dict) -> None:
     """Run and review live, scope-specific pricing hypotheses."""
     _header(
         "Pricing hypotheses",
-        "Select a commercial scope and ask the agent to find evidence-backed pricing opportunities.",
+        "Select a commercial scope and ask the agent to generate evidence-backed hypotheses.",
     )
     brands = _filter_options(filter_values, "brands")
     skus = _filter_options(filter_values, "sku_ids", "skus")
@@ -236,7 +236,7 @@ def render_hypotheses(agent, filter_values: dict) -> None:
             "currently supports brand and SKU scope."
         )
         run_scan = st.button(
-            "Find pricing opportunities", type="primary", use_container_width=True
+            "Generate hypotheses", type="primary", use_container_width=True
         )
 
     if run_scan:

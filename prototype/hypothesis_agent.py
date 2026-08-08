@@ -8,7 +8,7 @@ from typing import Any
 
 from openai import OpenAI
 
-from skai_service import SkaiError, SkaiGrowthService
+from skai_service import SkaiGrowthService
 
 
 HYPOTHESIS_SCHEMA = {
@@ -86,11 +86,20 @@ class PricingHypothesisAgent:
         for source, call in source_calls.items():
             try:
                 raw[source] = call()
-            except SkaiError as exc:
+            except Exception as exc:
                 errors[source] = str(exc)
         if not raw:
-            joined = "; ".join(f"{source}: {error}" for source, error in errors.items())
-            raise SkaiError(f"No pricing evidence source was available. {joined}")
+            return (
+                {
+                    "scope_summary": "No SKAI pricing evidence source returned data.",
+                    "data_limitations": [
+                        f'{source.replace("_", " ").title()}: {error}'
+                        for source, error in errors.items()
+                    ],
+                    "hypotheses": [],
+                },
+                {"source_errors": errors},
+            )
         if errors:
             raw["source_errors"] = errors
         compact = {
