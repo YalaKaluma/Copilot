@@ -14,6 +14,7 @@ from openai import OpenAI
 from agent import SkaiAgent
 from feedback_export import build_feedback_workbook
 from hypothesis_agent import PricingHypothesisAgent
+from opportunity_agent import PricingOpportunityAgent
 from orchestrator import Orchestrator
 from pricing_workspace import (
     initialize_workspace,
@@ -505,7 +506,25 @@ if page == "Hypotheses":
         hypothesis_service.close()
     st.stop()
 if page == "Opportunities":
-    render_opportunities()
+    opportunity_agent = None
+    opportunity_service = None
+    if st.session_state.get("skai_token") and openai_key:
+        opportunity_service = SkaiGrowthService(
+            skai_url,
+            market_base_url=os.getenv("SKAI_MARKET_API_URL") or None,
+            tenant_code=tenant_code,
+            token=st.session_state["skai_token"],
+            origin=os.getenv("SKAI_API_ORIGIN") or None,
+            referer=os.getenv("SKAI_API_REFERER") or None,
+        )
+        opportunity_agent = PricingOpportunityAgent(
+            opportunity_service, OpenAI(api_key=openai_key), model
+        )
+    try:
+        render_opportunities(opportunity_agent)
+    finally:
+        if opportunity_service is not None:
+            opportunity_service.close()
     st.stop()
 if page == "Sell-in Stories":
     render_stories()

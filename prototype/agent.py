@@ -127,7 +127,7 @@ class SkaiAgent:
                 key: value for key, value in arguments.items() if key in allowed
             }
             base = self.skai.get_simulator_base(**base_arguments)
-            base_rows = base.get("data") or []
+            base_rows = base.get("rows") or base.get("data") or []
             if not base_rows:
                 raise ValueError(
                     "SKAI returned no simulator base products for the requested scope."
@@ -148,9 +148,11 @@ class SkaiAgent:
 
             price_changes = []
             for row in base_rows:
-                product_id = row.get("product_id")
                 old_price = row.get("old_price")
-                if product_id is None or old_price is None:
+                sku_id = row.get("sku_id")
+                retailer = row.get("retailer")
+                channel = row.get("channel")
+                if not sku_id or not retailer or not channel or old_price is None:
                     continue
                 target_price = (
                     float(new_price)
@@ -159,7 +161,9 @@ class SkaiAgent:
                 )
                 price_changes.append(
                     {
-                        "product_id": int(product_id),
+                        "sku_id": sku_id,
+                        "retailer": retailer,
+                        "channel": channel,
                         "new_price": round(target_price, 4),
                         "delisted": False,
                     }
@@ -173,13 +177,11 @@ class SkaiAgent:
             simulation = self.skai.run_price_simulation(
                 {
                     "price_changes": price_changes,
-                    "owned_brand": arguments.get("owned_brand"),
-                    "config": {
-                        "elasticity_mode": "fallback",
-                        "vtm_mode": "market_share",
-                    },
-                    "include_charts": arguments.get("include_charts", False),
-                }
+                    "use_cross_elasticities": False,
+                    "impacted_only": False,
+                    "horizon": "short_run",
+                },
+                **base_arguments,
             )
             return {
                 "analysis_mode": "price_simulation",

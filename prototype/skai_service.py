@@ -154,6 +154,8 @@ class SkaiGrowthService:
 
     def get_simulator_base(self, **filters: Any) -> dict[str, Any]:
         """Return the SKU/product IDs and current values required to simulate."""
+        if "retailers" in filters:
+            filters["retailer_groups"] = filters.pop("retailers")
         params = {
             key: value
             for key, value in filters.items()
@@ -166,11 +168,21 @@ class SkaiGrowthService:
             market_api=True,
         )
 
-    def run_price_simulation(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def run_price_simulation(
+        self, payload: dict[str, Any], **filters: Any
+    ) -> dict[str, Any]:
         """Run a pricing scenario using product IDs resolved from base data."""
+        if "retailers" in filters:
+            filters["retailer_groups"] = filters.pop("retailers")
+        params = {
+            key: value
+            for key, value in filters.items()
+            if value is not None and value != [] and value != ""
+        }
         return self._request(
             "POST",
             "/api/v1/pricing/simulator/run",
+            params=params,
             json_body=payload,
             market_api=True,
         )

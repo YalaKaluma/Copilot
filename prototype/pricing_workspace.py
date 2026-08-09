@@ -563,7 +563,7 @@ def render_hypotheses(agent, filter_values: dict) -> None:
                     "value": hypothesis.get("estimated_value", "Not quantified"),
                     "evidence": deepcopy(evidence),
                     "scope": deepcopy(scope),
-                    "status": "Recommendation ready",
+                    "status": "Awaiting simulation",
                     "owner": "Pricing team",
                     "objective": "Margin",
                     "max_volume_loss": "1.5%",
@@ -571,8 +571,8 @@ def render_hypotheses(agent, filter_values: dict) -> None:
                     "protected": "Entry-price pack",
                     "excluded": "None",
                     "timing": "Next list-price window",
-                    "selected": "Balanced",
-                    "scenarios": deepcopy(SCENARIOS),
+                    "selected": None,
+                    "scenarios": [],
                 }
                 st.session_state.pricing_opportunities[opportunity_id]["scope"].update(
                     {
@@ -608,10 +608,10 @@ def render_hypotheses(agent, filter_values: dict) -> None:
     )
 
 
-def render_opportunities() -> None:
+def render_opportunities(agent=None) -> None:
     selected = st.session_state.opportunity_detail
     if selected and selected in st.session_state.pricing_opportunities:
-        _render_opportunity(st.session_state.pricing_opportunities[selected])
+        _render_opportunity(st.session_state.pricing_opportunities[selected], agent)
         return
     _header("Pricing opportunities", "Commercial decisions created from pursued hypotheses.")
     if not st.session_state.pricing_opportunities:
@@ -630,7 +630,37 @@ def render_opportunities() -> None:
                     st.rerun()
 
 
-def _render_opportunity(opp: dict) -> None:
+def _delta(value) -> str:
+    return "Not available" if value is None else f"{float(value):+.2f}%"
+
+
+def _scenario_score(scenario: dict, objective: str, max_volume_loss: str) -> float:
+    margin = scenario.get("margin_delta_pct")
+    revenue = scenario.get("revenue_delta_pct")
+    volume = scenario.get("volume_delta_pct")
+    try:
+        volume_floor = -abs(float(str(max_volume_loss).replace("%", "").strip()))
+    except ValueError:
+        volume_floor = float("-inf")
+    if volume is not None and float(volume) < volume_floor:
+        return -1_000_000 + float(volume)
+    primary = {
+        "Margin": margin,
+        "Revenue": revenue,
+        "Volume": volume,
+        "Share": volume,
+    }.get(objective)
+    if primary is None:
+        primary = revenue if revenue is not None else volume
+    return float(primary) if primary is not None else float("-inf")
+
+
+def _render_opportunity(opp: dict, agent=None) -> None:
+    if opp.get("scenarios") and "current_price" not in opp["scenarios"][0]:
+        # Replace the original design-only mock scenarios for live opportunities.
+        opp["scenarios"] = []
+        opp["selected"] = None
+        opp["status"] = "Awaiting simulation"
     if st.button("← Back to opportunities"):
         st.session_state.opportunity_detail = None
         st.rerun()
@@ -646,18 +676,88 @@ def _render_opportunity(opp: dict) -> None:
         opp["timing"] = c2.text_input("Timing constraints", opp["timing"])
         if st.form_submit_button("Update constraints"):
             st.session_state.pricing_opportunities[opp["id"]] = opp
-            st.success("Constraints updated; the agent would rerun the background scenarios.")
+            st.success("Constraints updated. Rerun the scenarios to refresh the recommendation.")
     st.subheader("Agent-generated scenarios")
-    st.caption("Business outcomes are shown; simulator controls and technical parameters stay hidden.")
-    st.dataframe(opp["scenarios"], use_container_width=True, hide_index=True)
+    st.caption(
+        "The agent proposes three prices from the accepted evidence. SKAI then "
+        "projects revenue, margin, and volume for each price."
+    )
+    if agent is None:
+        st.warning("Connect to SKAI and provide an OpenAI key to run price scenarios.")
+    if st.button(
+        "Generate and run 3 price scenarios",
+        type="primary",
+        use_container_width=True,
+        disabled=agent is None,
+    ):
+        with st.status("Designing prices and running the SKAI simulator...", expanded=True) as status:
+            try:
+                st.write("Reading the accepted hypothesis and evidence")
+                st.write("Resolving the current SKU-retailer shelf price")
+                st.write("Running Conservative, Balanced, and Ambitious prices")
+                result = agent.run_scenarios(opp)
+                opp["scenario_rationale"] = result["rationale"]
+                opp["simulator_base_row"] = result["base_row"]
+                opp["scenarios"] = result["scenarios"]
+                recommended = max(
+                    opp["scenarios"],
+                    key=lambda scenario: _scenario_score(
+                        scenario, opp["objective"], opp["max_volume_loss"]
+                    ),
+                )
+                opp["selected"] = recommended["name"]
+                opp["status"] = "Recommendation ready"
+                st.session_state.pricing_opportunities[opp["id"]] = opp
+                status.update(label="Three simulations complete", state="complete", expanded=False)
+                st.rerun()
+            except Exception as exc:
+                status.update(label="Simulation could not be completed", state="error")
+                st.error(str(exc))
+
+    if not opp.get("scenarios"):
+        st.info("Run the three scenarios to compare the commercial outcomes.")
+        return
+    if opp.get("scenario_rationale"):
+        st.write(opp["scenario_rationale"])
+    table = [
+        {
+            "Scenario": scenario["name"],
+            "Current price": f'{scenario["current_price"]:.2f}',
+            "Test price": f'{scenario["new_price"]:.2f}',
+            "Price change": _delta(scenario["price_change_pct"]),
+            "Revenue": _delta(scenario.get("revenue_delta_pct")),
+            "Margin": _delta(scenario.get("margin_delta_pct")),
+            "Volume": _delta(scenario.get("volume_delta_pct")),
+        }
+        for scenario in opp["scenarios"]
+    ]
+    st.dataframe(table, use_container_width=True, hide_index=True)
     names = [s["name"] for s in opp["scenarios"]]
-    opp["selected"] = st.radio("Scenario for decision", names, index=names.index(opp["selected"]), horizontal=True)
+    selected_index = names.index(opp["selected"]) if opp.get("selected") in names else 0
+    opp["selected"] = st.radio(
+        "Scenario for decision", names, index=selected_index, horizontal=True
+    )
     selected = next(s for s in opp["scenarios"] if s["name"] == opp["selected"])
     with st.container(border=True):
         st.caption("INTEGRATED AGENT RECOMMENDATION")
         st.subheader(f'Choose the {selected["name"]} scenario')
-        st.write(f'{selected["action"]}. It is expected to deliver **{selected["margin"]} margin** and **{selected["revenue"]} revenue**, with **{selected["volume"]} volume**. Confidence: {selected["confidence"]}.')
-        st.write(f'It best balances the **{opp["objective"].lower()}** objective with the **{opp["max_volume_loss"]}** volume-loss guardrail. Main risks are elasticity error and retailer response; mitigate through staged retailer validation and a competitor-price check.')
+        st.write(
+            f'Test a price of **{selected["new_price"]:.2f}** '
+            f'({_delta(selected["price_change_pct"])}). SKAI projects '
+            f'**{_delta(selected.get("margin_delta_pct"))} margin**, '
+            f'**{_delta(selected.get("revenue_delta_pct"))} revenue**, and '
+            f'**{_delta(selected.get("volume_delta_pct"))} volume**.'
+        )
+        st.write(selected.get("reason", ""))
+        if selected.get("margin_delta_pct") is None:
+            st.warning(
+                "SKAI did not provide margin inputs for this perimeter. The "
+                "recommendation therefore uses the available revenue and volume results."
+            )
+        st.write(
+            f'It is ranked against the **{opp["objective"].lower()}** objective '
+            f'and the **{opp["max_volume_loss"]}** volume-loss guardrail.'
+        )
     c1, c2, c3 = st.columns(3)
     if c1.button("Approve recommendation", type="primary", use_container_width=True):
         story_id = f'S-{opp["id"].split("-")[-1]}'
@@ -731,8 +831,16 @@ def _render_story(story: dict) -> None:
         ("4. Counterevidence", counter_findings),
         ("5. Confirmed opportunity", f'{opp["statement"]} Estimated value: {opp["value"]}.'),
         ("6. Scenarios considered", ", ".join(s["name"] for s in opp["scenarios"])),
-        ("7. Recommended action", scenario["action"]),
-        ("8. Expected impact", f'Revenue {scenario["revenue"]}; margin {scenario["margin"]}; volume {scenario["volume"]}.'),
+        (
+            "7. Recommended action",
+            scenario.get("reason") or scenario.get("action", "Run the selected price scenario."),
+        ),
+        (
+            "8. Expected impact",
+            f'Revenue {_delta(scenario.get("revenue_delta_pct")) if "revenue_delta_pct" in scenario else scenario.get("revenue")}; '
+            f'margin {_delta(scenario.get("margin_delta_pct")) if "margin_delta_pct" in scenario else scenario.get("margin")}; '
+            f'volume {_delta(scenario.get("volume_delta_pct")) if "volume_delta_pct" in scenario else scenario.get("volume")}.'
+        ),
         ("9. Risks and mitigations", "Validate elasticity and retailer acceptance; stage execution, protect the entry pack and monitor competitor response."),
     ]
     for title, body in sections:
