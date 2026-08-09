@@ -616,7 +616,7 @@ def render_opportunities(agent=None) -> None:
                 st.subheader(opp["statement"])
                 st.write(f'Value at stake: **{opp["value"]}** · Source hypothesis: **{opp["hypothesis_id"]}**')
             with c2:
-                if st.button("Review decision", key=f'opp-{opp["id"]}', use_container_width=True):
+                if st.button("Define RGM Action", key=f'opp-{opp["id"]}', use_container_width=True):
                     st.session_state.opportunity_detail = opp["id"]
                     st.rerun()
 
@@ -646,6 +646,55 @@ def _scenario_score(scenario: dict, objective: str, max_volume_loss: str) -> flo
     return float(primary) if primary is not None else float("-inf")
 
 
+def _run_opportunity_scenarios(opp: dict, agent) -> None:
+    """Generate, simulate, and rank three price actions for one opportunity."""
+    result = agent.run_scenarios(opp)
+    opp["scenario_rationale"] = result["rationale"]
+    opp["simulator_base_row"] = result["base_row"]
+    opp["scenarios"] = result["scenarios"]
+    recommended = max(
+        opp["scenarios"],
+        key=lambda scenario: _scenario_score(
+            scenario, opp["objective"], opp["max_volume_loss"]
+        ),
+    )
+    opp["selected"] = recommended["name"]
+    opp["recommended_scenario"] = recommended["name"]
+    opp["status"] = "Recommendation ready"
+    opp["simulation_attempted"] = True
+    opp.pop("simulation_error", None)
+    st.session_state.pricing_opportunities[opp["id"]] = opp
+
+
+def _comparison_conclusion(opp: dict, recommended: dict) -> str:
+    objective = opp["objective"]
+    metric_key = {
+        "Margin": "margin_delta_pct",
+        "Revenue": "revenue_delta_pct",
+        "Volume": "volume_delta_pct",
+        "Share": "volume_delta_pct",
+    }[objective]
+    metric_label = objective.lower()
+    if recommended.get(metric_key) is None:
+        metric_key = "revenue_delta_pct"
+        metric_label = "revenue (margin was unavailable)"
+    others = [
+        scenario for scenario in opp["scenarios"]
+        if scenario["name"] != recommended["name"]
+    ]
+    alternatives = ", ".join(
+        f'{scenario["name"]} at {_delta(scenario.get(metric_key))}'
+        for scenario in others
+    )
+    return (
+        f'**{recommended["name"]} is the strongest scenario.** It delivers '
+        f'**{_delta(recommended.get(metric_key))} {metric_label}** with '
+        f'**{_delta(recommended.get("volume_delta_pct"))} volume**, versus '
+        f'{alternatives}. It is the best available result after applying the '
+        f'{opp["max_volume_loss"]} volume-loss guardrail.'
+    )
+
+
 def _render_opportunity(opp: dict, agent=None) -> None:
     if opp.get("scenarios") and "current_price" not in opp["scenarios"][0]:
         # Replace the original design-only mock scenarios for live opportunities.
@@ -656,49 +705,56 @@ def _render_opportunity(opp: dict, agent=None) -> None:
         st.session_state.opportunity_detail = None
         st.rerun()
     _header(opp["statement"], f'Traceable to {opp["hypothesis_id"]}; simulation runs in the agent intelligence layer.', opp["id"])
-    st.subheader("Business objective and guardrails")
-    with st.form(f'guardrails-{opp["id"]}'):
-        c1, c2 = st.columns(2)
-        opp["objective"] = c1.selectbox("Primary objective", ["Revenue", "Margin", "Volume", "Share"], index=["Revenue", "Margin", "Volume", "Share"].index(opp["objective"]))
-        opp["max_volume_loss"] = c2.text_input("Maximum acceptable volume loss", opp["max_volume_loss"])
-        opp["minimum_margin"] = c1.text_input("Minimum margin improvement", opp["minimum_margin"])
-        opp["protected"] = c2.text_input("Protected SKUs or price points", opp["protected"])
-        opp["excluded"] = c1.text_input("Excluded retailers or channels", opp["excluded"])
-        opp["timing"] = c2.text_input("Timing constraints", opp["timing"])
-        if st.form_submit_button("Update constraints"):
-            st.session_state.pricing_opportunities[opp["id"]] = opp
-            st.success("Constraints updated. Rerun the scenarios to refresh the recommendation.")
-    st.subheader("Agent-generated scenarios")
-    st.caption(
-        "The agent proposes three prices from the accepted evidence. SKAI then "
-        "projects revenue, margin, and volume for each price."
-    )
-    if agent is None:
-        st.warning("Connect to SKAI and provide an OpenAI key to run price scenarios.")
-    if st.button(
-        "Generate and run 3 price scenarios",
-        type="primary",
-        use_container_width=True,
-        disabled=agent is None,
-    ):
+    if not opp.get("scenarios") and agent is not None and not opp.get("simulation_attempted"):
         with st.status("Designing prices and running the SKAI simulator...", expanded=True) as status:
             try:
                 st.write("Reading the accepted hypothesis and evidence")
                 st.write("Resolving the current SKU-retailer shelf price")
                 st.write("Running Conservative, Balanced, and Ambitious prices")
-                result = agent.run_scenarios(opp)
-                opp["scenario_rationale"] = result["rationale"]
-                opp["simulator_base_row"] = result["base_row"]
-                opp["scenarios"] = result["scenarios"]
-                recommended = max(
-                    opp["scenarios"],
-                    key=lambda scenario: _scenario_score(
-                        scenario, opp["objective"], opp["max_volume_loss"]
-                    ),
-                )
-                opp["selected"] = recommended["name"]
-                opp["status"] = "Recommendation ready"
+                _run_opportunity_scenarios(opp, agent)
+                status.update(label="Three simulations complete", state="complete", expanded=False)
+                st.rerun()
+            except Exception as exc:
+                opp["simulation_attempted"] = True
+                opp["simulation_error"] = str(exc)
                 st.session_state.pricing_opportunities[opp["id"]] = opp
+                status.update(label="Simulation could not be completed", state="error")
+                st.error(str(exc))
+
+    with st.expander("Business objective and guardrails", expanded=False):
+        with st.form(f'guardrails-{opp["id"]}'):
+            c1, c2 = st.columns(2)
+            opp["objective"] = c1.selectbox("Primary objective", ["Revenue", "Margin", "Volume", "Share"], index=["Revenue", "Margin", "Volume", "Share"].index(opp["objective"]))
+            opp["max_volume_loss"] = c2.text_input("Maximum acceptable volume loss", opp["max_volume_loss"])
+            opp["minimum_margin"] = c1.text_input("Minimum margin improvement", opp["minimum_margin"])
+            opp["protected"] = c2.text_input("Protected SKUs or price points", opp["protected"])
+            opp["excluded"] = c1.text_input("Excluded retailers or channels", opp["excluded"])
+            opp["timing"] = c2.text_input("Timing constraints", opp["timing"])
+            if st.form_submit_button("Update constraints"):
+                if opp.get("scenarios"):
+                    recommended = max(
+                        opp["scenarios"],
+                        key=lambda scenario: _scenario_score(
+                            scenario, opp["objective"], opp["max_volume_loss"]
+                        ),
+                    )
+                    opp["recommended_scenario"] = recommended["name"]
+                    opp["selected"] = recommended["name"]
+                st.session_state.pricing_opportunities[opp["id"]] = opp
+                st.success("Constraints updated and the scenarios were re-ranked.")
+    st.subheader("Agent-generated scenarios")
+    st.caption(
+        "The agent proposes three prices from the accepted evidence. SKAI then "
+        "projects revenue, margin, and volume for each price."
+    )
+    if agent is None and not opp.get("scenarios"):
+        st.warning("Connect to SKAI and provide an OpenAI key to run price scenarios.")
+    if opp.get("simulation_error") and st.button(
+        "Retry scenario simulations", use_container_width=True, disabled=agent is None
+    ):
+        with st.status("Designing prices and running the SKAI simulator...", expanded=True) as status:
+            try:
+                _run_opportunity_scenarios(opp, agent)
                 status.update(label="Three simulations complete", state="complete", expanded=False)
                 st.rerun()
             except Exception as exc:
@@ -706,7 +762,7 @@ def _render_opportunity(opp: dict, agent=None) -> None:
                 st.error(str(exc))
 
     if not opp.get("scenarios"):
-        st.info("Run the three scenarios to compare the commercial outcomes.")
+        st.info("The scenario comparison will appear once the simulations complete.")
         return
     if opp.get("scenario_rationale"):
         st.write(opp["scenario_rationale"])
@@ -723,6 +779,20 @@ def _render_opportunity(opp: dict, agent=None) -> None:
         for scenario in opp["scenarios"]
     ]
     st.dataframe(table, use_container_width=True, hide_index=True)
+    recommended_name = opp.get("recommended_scenario") or opp.get("selected")
+    recommended = next(
+        scenario for scenario in opp["scenarios"]
+        if scenario["name"] == recommended_name
+    )
+    st.subheader("Scenario comparison")
+    for scenario in opp["scenarios"]:
+        st.markdown(
+            f'- **{scenario["name"]}:** price {_delta(scenario["price_change_pct"])}, '
+            f'revenue {_delta(scenario.get("revenue_delta_pct"))}, '
+            f'margin {_delta(scenario.get("margin_delta_pct"))}, and '
+            f'volume {_delta(scenario.get("volume_delta_pct"))}.'
+        )
+    st.write(_comparison_conclusion(opp, recommended))
     names = [s["name"] for s in opp["scenarios"]]
     selected_index = names.index(opp["selected"]) if opp.get("selected") in names else 0
     opp["selected"] = st.radio(

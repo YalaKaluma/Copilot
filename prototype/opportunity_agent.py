@@ -77,7 +77,9 @@ class PricingOpportunityAgent:
             raise ValueError("This SKU-retailer row is not ready for scenario planning.")
 
         current_price = float(row.get("base_non_promo_price") or row["old_price"])
-        proposal = self._propose_prices(hypothesis, row, current_price)
+        proposal = self._propose_prices(
+            opportunity, hypothesis, row, current_price
+        )
         scenarios: list[dict[str, Any]] = []
         for scenario in proposal["scenarios"]:
             new_price = round(float(scenario["new_price"]), 4)
@@ -123,7 +125,11 @@ class PricingOpportunityAgent:
         }
 
     def _propose_prices(
-        self, hypothesis: dict[str, Any], base_row: dict[str, Any], current_price: float
+        self,
+        opportunity: dict[str, Any],
+        hypothesis: dict[str, Any],
+        base_row: dict[str, Any],
+        current_price: float,
     ) -> dict[str, Any]:
         direction = hypothesis.get("direction", "Increase price")
         response = self.client.chat.completions.create(
@@ -146,6 +152,13 @@ class PricingOpportunityAgent:
                         {
                             "direction": direction,
                             "current_shelf_price": current_price,
+                            "decision_context": {
+                                key: opportunity.get(key)
+                                for key in (
+                                    "objective", "max_volume_loss", "minimum_margin",
+                                    "protected", "excluded", "timing",
+                                )
+                            },
                             "hypothesis": hypothesis,
                             "simulator_base_context": {
                                 key: base_row.get(key)
