@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from openai import OpenAI
 
 from skai_service import SkaiGrowthService
+
+
+GUIDANCE_FILE = Path(__file__).with_name("guidance") / "pricing_hypothesis_agent.md"
 
 
 HYPOTHESIS_SCHEMA = {
@@ -65,7 +70,14 @@ class PricingHypothesisAgent:
     client: OpenAI
     model: str
 
-    def investigate(self, *, brand: str | None, sku_id: str | None, retailer: str | None) -> tuple[dict[str, Any], dict[str, Any]]:
+    def investigate(
+        self,
+        *,
+        brand: str | None,
+        sku_id: str | None,
+        retailer: str | None,
+        comparison_retailers: list[str] | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Collect live SKAI evidence and turn it into decision hypotheses."""
         retailer_filter = [retailer] if retailer else []
         brand_filter = [brand] if brand else []
@@ -90,13 +102,29 @@ class PricingHypothesisAgent:
             source_calls["price_ladder_selected_retailer"] = (
                 lambda: self.service.get_price_ladder(retailers=retailer_filter)
             )
+        for peer_retailer in (comparison_retailers or [])[:4]:
+            source_calls[f"market_landscape_peer::{peer_retailer}"] = (
+                lambda peer=peer_retailer: self.service.get_market_landscape(
+                    split_by="brand", retailers=[peer]
+                )
+            )
+            source_calls[f"price_ladder_peer::{peer_retailer}"] = (
+                lambda peer=peer_retailer: self.service.get_price_ladder(
+                    retailers=[peer]
+                )
+            )
         raw: dict[str, Any] = {}
         errors: dict[str, str] = {}
-        for source, call in source_calls.items():
-            try:
-                raw[source] = call()
-            except Exception as exc:
-                errors[source] = str(exc)
+        with ThreadPoolExecutor(max_workers=min(6, len(source_calls))) as executor:
+            futures = {
+                executor.submit(call): source for source, call in source_calls.items()
+            }
+            for future in as_completed(futures):
+                source = futures[future]
+                try:
+                    raw[source] = future.result()
+                except Exception as exc:
+                    errors[source] = str(exc)
         if not raw:
             return (
                 {
@@ -122,6 +150,7 @@ class PricingHypothesisAgent:
             "brand": brand or "All brands",
             "sku_id": sku_id or "All SKUs",
             "retailer": retailer or "All retailers",
+            "comparison_retailers": (comparison_retailers or [])[:4],
             "scope_note": (
                 "Retailer applies to Market Landscape and Price Ladder. "
                 "Price Pack Curve is retrieved for the full selected brand so the "
@@ -138,11 +167,14 @@ class PricingHypothesisAgent:
                         "You are a rigorous RGM pricing hypothesis agent. Return exactly two directional hypotheses and no other commercial lever: H-PRICE-UP tests an INCREASE in price; H-PRICE-DOWN tests a DECREASE in price. "
                         "Use pricing language only. Do not propose promotion mechanics, promotional frequency, trade terms, assortment, mix actions, or generic audits as the opportunity. "
                         "Every hypothesis must contain supporting evidence and counterevidence when the data allows it. Weak or missing evidence should lower confidence, not create a different hypothesis. Never invent elasticity, causality, willingness to pay, financial value, or missing fields. "
-                        "Assess competitive price positioning versus SKUs/brands, growth patterns, share patterns, within-brand pack-price consistency, and differences between overall-market and selected-retailer results. The selected SKU is the analytical focus inside the full-brand Price Pack Curve; do not ignore the other same-brand packs. "
+                        "Assess competitive price positioning versus SKUs/brands, growth patterns, share patterns, within-brand pack-price consistency, and differences across the selected and comparison retailers. The selected SKU is the analytical focus inside the full-brand Price Pack Curve; compare its price with relevant same-brand pack sizes and explain whether the internal architecture is coherent. "
                         "Use Market Landscape for share/growth/market price context, Price Ladder for competitive average-price positioning, and Price Pack Curve for pack architecture. "
+                        "Evidence-card rules learned from reviewer feedback: each card must contain one coherent signal only. Never combine growth and share in one card when they point in opposite directions; create separate cards on opposite sides or omit the ambiguous combination. Say 'sales growth' or 'volume growth', never the vague word 'performance'. Use Price Ladder as the primary source for competitive positioning and check whether positioning is consistent across comparison retailers. Avoid unclear claims such as 'not an unambiguous low-price position'; instead state the exact relevant peer gap and its implication. "
+                        "Market Landscape does not support SKU grouping in this API. Use it for brand growth/share; use Price Pack Curve for SKU-level growth and pack architecture. "
                         "Average prices can reflect pack and mix. Estimated value must be 'Not quantified' unless the payload directly supports a defensible value; explain the basis. "
                         "Unavailable or empty sources are data limitations and must never be cited as positive or negative proof. If selected SKU ownership is false or unverified, explicitly make that strong counterevidence for both actions. "
-                        "Priority combines evidence confidence, potential materiality, and actionability. Findings must cite actual values from the payload."
+                        "Priority combines evidence confidence, potential materiality, and actionability. Findings must cite actual values from the payload.\n\n"
+                        + GUIDANCE_FILE.read_text(encoding="utf-8")
                     ),
                 },
                 {

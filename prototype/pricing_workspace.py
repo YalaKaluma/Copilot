@@ -266,16 +266,28 @@ def render_hypotheses(agent, filter_values: dict) -> None:
             st.write("Reading Market Landscape")
             st.write("Reading Price Ladder")
             st.write("Reading Price Pack Curve")
+            selected_retailer = None if retailer == "All retailers" else retailer
+            peer_retailers = [
+                candidate
+                for candidate in retailers
+                if candidate != selected_retailer
+            ][:4]
+            st.write(
+                "Comparing price position across "
+                f"{len(peer_retailers) + (1 if selected_retailer else 0)} retailers"
+            )
             result, raw = agent.investigate(
                 brand=None if brand == "All brands" else brand,
                 sku_id=None if sku == "All SKUs" else sku,
-                retailer=None if retailer == "All retailers" else retailer,
+                retailer=selected_retailer,
+                comparison_retailers=peer_retailers,
             )
             st.session_state.generated_hypotheses = result.get("hypotheses", [])
             st.session_state.hypothesis_scan_scope = {
                 "brand": brand,
                 "sku": sku,
                 "retailer": retailer,
+                "comparison_retailers": peer_retailers,
                 "lever": lever,
                 "summary": result.get("scope_summary", ""),
             }
