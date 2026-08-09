@@ -652,10 +652,18 @@ def _run_opportunity_scenarios(opp: dict, agent) -> None:
     opp["scenario_rationale"] = result["rationale"]
     opp["simulator_base_row"] = result["base_row"]
     opp["scenarios"] = result["scenarios"]
-    recommended = max(
-        opp["scenarios"],
-        key=lambda scenario: _scenario_score(
-            scenario, opp["objective"], opp["max_volume_loss"]
+    opp["scenario_comparison"] = result.get("comparison", {})
+    recommendation_name = opp["scenario_comparison"].get("recommended_scenario")
+    recommended = next(
+        (
+            scenario for scenario in opp["scenarios"]
+            if scenario["name"] == recommendation_name
+        ),
+        max(
+            opp["scenarios"],
+            key=lambda scenario: _scenario_score(
+                scenario, opp["objective"], opp["max_volume_loss"]
+            ),
         ),
     )
     opp["selected"] = recommended["name"]
@@ -719,6 +727,34 @@ def _render_opportunity(opp: dict, agent=None) -> None:
                 opp["simulation_error"] = str(exc)
                 st.session_state.pricing_opportunities[opp["id"]] = opp
                 status.update(label="Simulation could not be completed", state="error")
+                st.error(str(exc))
+    if (
+        opp.get("scenarios")
+        and not opp.get("scenario_comparison")
+        and agent is not None
+        and not opp.get("comparison_attempted")
+    ):
+        with st.status("Comparing the three RGM moves...", expanded=True) as status:
+            try:
+                opp["scenario_comparison"] = agent.compare_existing_scenarios(opp)
+                opp["comparison_attempted"] = True
+                recommendation_name = opp["scenario_comparison"].get(
+                    "recommended_scenario"
+                )
+                if recommendation_name:
+                    opp["recommended_scenario"] = recommendation_name
+                    opp["selected"] = recommendation_name
+                st.session_state.pricing_opportunities[opp["id"]] = opp
+                status.update(
+                    label="Scenario comparison complete",
+                    state="complete",
+                    expanded=False,
+                )
+                st.rerun()
+            except Exception as exc:
+                opp["comparison_attempted"] = True
+                st.session_state.pricing_opportunities[opp["id"]] = opp
+                status.update(label="Comparison could not be completed", state="error")
                 st.error(str(exc))
 
     with st.expander("Business objective and guardrails", expanded=False):
@@ -785,14 +821,40 @@ def _render_opportunity(opp: dict, agent=None) -> None:
         if scenario["name"] == recommended_name
     )
     st.subheader("Scenario comparison")
-    for scenario in opp["scenarios"]:
-        st.markdown(
-            f'- **{scenario["name"]}:** price {_delta(scenario["price_change_pct"])}, '
-            f'revenue {_delta(scenario.get("revenue_delta_pct"))}, '
-            f'margin {_delta(scenario.get("margin_delta_pct"))}, and '
-            f'volume {_delta(scenario.get("volume_delta_pct"))}.'
-        )
-    st.write(_comparison_conclusion(opp, recommended))
+    comparison = opp.get("scenario_comparison") or {}
+    assessments = comparison.get("scenario_assessments") or []
+    if assessments:
+        columns = st.columns(3)
+        for column, assessment in zip(columns, assessments):
+            with column:
+                with st.container(border=True):
+                    st.subheader(assessment["name"])
+                    st.write(assessment["verdict"])
+                    st.markdown("**Pros**")
+                    for item in assessment.get("pros", []):
+                        st.markdown(f"- {item}")
+                    st.markdown("**Cons**")
+                    for item in assessment.get("cons", []):
+                        st.markdown(f"- {item}")
+                    st.markdown("**Fit with the evidence**")
+                    st.write(assessment.get("evidence_fit", ""))
+                    st.markdown("**Best use case**")
+                    st.write(assessment.get("best_use_case", ""))
+        with st.container(border=True):
+            st.caption("AGENT COMPARATIVE CONCLUSION")
+            st.subheader(f'{comparison.get("recommended_scenario", recommended["name"])} is the preferred move')
+            st.write(comparison.get("recommendation_reason", ""))
+            for caveat in comparison.get("caveats", []):
+                st.warning(caveat)
+    else:
+        for scenario in opp["scenarios"]:
+            st.markdown(
+                f'- **{scenario["name"]}:** price {_delta(scenario["price_change_pct"])}, '
+                f'revenue {_delta(scenario.get("revenue_delta_pct"))}, '
+                f'margin {_delta(scenario.get("margin_delta_pct"))}, and '
+                f'volume {_delta(scenario.get("volume_delta_pct"))}.'
+            )
+        st.write(_comparison_conclusion(opp, recommended))
     names = [s["name"] for s in opp["scenarios"]]
     selected_index = names.index(opp["selected"]) if opp.get("selected") in names else 0
     opp["selected"] = st.radio(

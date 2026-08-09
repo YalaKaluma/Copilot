@@ -38,12 +38,76 @@ PRICE_SCENARIO_SCHEMA = {
     "additionalProperties": False,
 }
 
+SCENARIO_COMPARISON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "scenario_assessments": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "enum": ["Conservative", "Balanced", "Ambitious"],
+                    },
+                    "verdict": {"type": "string"},
+                    "pros": {"type": "array", "items": {"type": "string"}},
+                    "cons": {"type": "array", "items": {"type": "string"}},
+                    "evidence_fit": {"type": "string"},
+                    "best_use_case": {"type": "string"},
+                },
+                "required": [
+                    "name", "verdict", "pros", "cons", "evidence_fit",
+                    "best_use_case",
+                ],
+                "additionalProperties": False,
+            },
+        },
+        "recommended_scenario": {
+            "type": "string",
+            "enum": ["Conservative", "Balanced", "Ambitious"],
+        },
+        "recommendation_reason": {"type": "string"},
+        "caveats": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": [
+        "scenario_assessments", "recommended_scenario",
+        "recommendation_reason", "caveats",
+    ],
+    "additionalProperties": False,
+}
+
 
 @dataclass
 class PricingOpportunityAgent:
     service: SkaiGrowthService
     client: OpenAI
     model: str
+
+    def compare_existing_scenarios(
+        self, opportunity: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Add the full decision comparison to scenarios already simulated."""
+        hypothesis = opportunity.get("hypothesis", {})
+        base_row = opportunity.get("simulator_base_row") or {}
+        scenarios = opportunity.get("scenarios") or []
+        if not base_row or len(scenarios) != 3:
+            raise ValueError("Three completed simulations are required for comparison.")
+        for scenario in scenarios:
+            summary = scenario.get("raw_summary") or {}
+            for field, source_key in (
+                ("revenue_delta_pct", "sales_delta_pct"),
+                ("margin_delta_pct", "margin_delta_pct"),
+                ("volume_delta_pct", "volume_delta_pct"),
+            ):
+                refreshed = self._summary_metric(summary, [], source_key)
+                if refreshed is not None:
+                    scenario[field] = refreshed
+        return self._compare_scenarios(
+            opportunity, hypothesis, base_row, scenarios
+        )
 
     def run_scenarios(self, opportunity: dict[str, Any]) -> dict[str, Any]:
         hypothesis = opportunity.get("hypothesis", {})
@@ -104,6 +168,7 @@ class PricingOpportunityAgent:
                 retailers=[retailer],
             )
             summary = simulation.get("summary") or {}
+            simulation_rows = simulation.get("rows") or []
             scenarios.append(
                 {
                     "name": scenario["name"],
@@ -111,18 +176,123 @@ class PricingOpportunityAgent:
                     "current_price": current_price,
                     "new_price": new_price,
                     "price_change_pct": (new_price / current_price - 1) * 100,
-                    "revenue_delta_pct": summary.get("sales_delta_pct"),
-                    "margin_delta_pct": summary.get("margin_delta_pct"),
-                    "volume_delta_pct": summary.get("volume_delta_pct"),
+                    "revenue_delta_pct": self._summary_metric(
+                        summary, simulation_rows, "sales_delta_pct"
+                    ),
+                    "margin_delta_pct": self._summary_metric(
+                        summary, simulation_rows, "margin_delta_pct"
+                    ),
+                    "volume_delta_pct": self._summary_metric(
+                        summary, simulation_rows, "volume_delta_pct"
+                    ),
                     "currency": summary.get("currency"),
                     "raw_summary": summary,
                 }
             )
+        comparison = self._compare_scenarios(opportunity, hypothesis, row, scenarios)
         return {
             "rationale": proposal["rationale"],
             "base_row": row,
             "scenarios": scenarios,
+            "comparison": comparison,
         }
+
+    @staticmethod
+    def _summary_metric(
+        summary: dict[str, Any], rows: list[dict[str, Any]], key: str
+    ) -> float | None:
+        """Use tenant KPIs first, then summary and row-level margin values."""
+        own_kpis = summary.get("kpis_own") or {}
+        value = own_kpis.get(key)
+        if value is None:
+            value = summary.get(key)
+        if value is not None:
+            return float(value)
+        if key != "margin_delta_pct":
+            return None
+        eligible = [
+            row for row in rows
+            if row.get("is_produced_by_tenant", True)
+            and row.get("margin_value_base") is not None
+            and row.get("margin_value_new") is not None
+        ]
+        if not eligible:
+            return None
+        base_margin = sum(float(row["margin_value_base"]) for row in eligible)
+        new_margin = sum(float(row["margin_value_new"]) for row in eligible)
+        return None if base_margin == 0 else (new_margin / base_margin - 1) * 100
+
+    def _compare_scenarios(
+        self,
+        opportunity: dict[str, Any],
+        hypothesis: dict[str, Any],
+        base_row: dict[str, Any],
+        scenarios: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        clean_scenarios = [
+            {key: value for key, value in scenario.items() if key != "raw_summary"}
+            for scenario in scenarios
+        ]
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a senior RGM decision agent. Compare all three live "
+                        "SKAI pricing simulations and recommend one. For each move, "
+                        "explain concrete pros, cons, evidence fit, and when it would be "
+                        "the right choice. Consider every available lens: revenue, margin, "
+                        "volume and guardrails; accepted supporting and counterevidence; "
+                        "selected-retailer versus overall and peer-retailer positioning; "
+                        "competitive Price Ladder signals; SKU and brand growth/share; "
+                        "same-brand pack-price architecture; current price-point logic; "
+                        "elasticity quality and model caveats. Do not invent missing margin "
+                        "or other metrics. If margin is unavailable, say so and base the "
+                        "decision on available outcomes. Be commercially specific and "
+                        "make trade-offs explicit rather than repeating the table."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "decision_context": {
+                                key: opportunity.get(key)
+                                for key in (
+                                    "objective", "max_volume_loss", "minimum_margin",
+                                    "protected", "excluded", "timing",
+                                )
+                            },
+                            "accepted_hypothesis": hypothesis,
+                            "simulator_context": {
+                                key: base_row.get(key)
+                                for key in (
+                                    "sku_id", "retailer", "channel", "old_price",
+                                    "base_non_promo_price", "own_elasticity",
+                                    "elasticity_quality_flag", "elasticity_quality_score",
+                                    "elasticity_quality_warnings",
+                                )
+                            },
+                            "simulated_scenarios": clean_scenarios,
+                        },
+                        default=str,
+                    ),
+                },
+            ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "pricing_scenario_comparison",
+                    "strict": True,
+                    "schema": SCENARIO_COMPARISON_SCHEMA,
+                },
+            },
+        )
+        content = response.choices[0].message.content
+        if not content:
+            raise RuntimeError("The scenario comparison agent returned no result.")
+        return json.loads(content)
 
     def _propose_prices(
         self,
