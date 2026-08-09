@@ -239,29 +239,54 @@ def _brand_filter_hierarchy(
     except Exception as exc:
         warnings.append(f"Could not derive brand-specific SKUs: {exc}")
 
+    valid_retailers: list[str] = []
+
+    def retailer_has_brand(retailer: str) -> tuple[str, bool]:
+        payload = agent.service.get_market_landscape(
+            split_by="brand", brands=[brand], retailers=[retailer]
+        )
+        return retailer, bool(payload.get("rows", []))
+
+    with ThreadPoolExecutor(max_workers=min(7, max(1, len(catalog_retailers)))) as pool:
+        futures = {
+            pool.submit(retailer_has_brand, retailer): retailer
+            for retailer in catalog_retailers
+        }
+        for future in as_completed(futures):
+            retailer = futures[future]
+            try:
+                resolved, has_data = future.result()
+                if has_data:
+                    valid_retailers.append(resolved)
+            except Exception as exc:
+                warnings.append(f"Could not validate {brand} at {retailer}: {exc}")
+
     valid_skus = sorted(valid_skus)
+    valid_retailers = [
+        retailer for retailer in catalog_retailers if retailer in valid_retailers
+    ]
     hierarchy = {
         "skus": valid_skus,
-        "retailers": catalog_retailers,
+        "retailers": valid_retailers,
         "warnings": warnings,
     }
     if not warnings:
         st.session_state[cache_key] = hierarchy
-    return valid_skus, catalog_retailers, warnings
+    return valid_skus, valid_retailers, warnings
 
 
-def _scope_retailers(
-    agent, brand: str, sku_ids: list[str], catalog_retailers: list[str]
+def _scope_skus(
+    agent, brand: str, retailer_ids: list[str], brand_skus: list[str]
 ) -> tuple[list[str], list[str]]:
-    """Return retailers containing data for the selected brand/SKU perimeter."""
-    if not sku_ids:
+    """Return SKUs with data in every selected retailer."""
+    if not retailer_ids:
         return [], []
     tenant = st.session_state.get("selected_tenant_code") or "default"
-    selection = "|".join(sorted(sku_ids))
-    cache_key = f"hypothesis_scope_retailers:{tenant}:{brand}:{selection}"
+    selection = "|".join(sorted(retailer_ids))
+    cache_key = f"hypothesis_scope_skus:{tenant}:{brand}:{selection}"
     cached = st.session_state.get(cache_key)
     if isinstance(cached, dict):
-        return cached["retailers"], cached.get("warnings", [])
+        return cached["skus"], cached.get("warnings", [])
 
     available_pairs: set[tuple[str, str]] = set()
     warnings: list[str] = []
@@ -275,12 +300,12 @@ def _scope_retailers(
         )
         return retailer, sku_id, bool(payload.get("rows", []))
 
-    pair_count = len(catalog_retailers) * len(sku_ids)
+    pair_count = len(retailer_ids) * len(brand_skus)
     with ThreadPoolExecutor(max_workers=min(14, max(1, pair_count))) as pool:
         futures = {
             pool.submit(has_scope_data, retailer, sku_id): (retailer, sku_id)
-            for retailer in catalog_retailers
-            for sku_id in sku_ids
+            for retailer in retailer_ids
+            for sku_id in brand_skus
         }
         for future in as_completed(futures):
             retailer, sku_id = futures[future]
@@ -292,12 +317,12 @@ def _scope_retailers(
                 warnings.append(f"Could not validate {sku_id} at {retailer}: {exc}")
 
     ordered = [
-        retailer
-        for retailer in catalog_retailers
-        if all((retailer, sku_id) in available_pairs for sku_id in sku_ids)
+        sku_id
+        for sku_id in brand_skus
+        if all((retailer, sku_id) in available_pairs for retailer in retailer_ids)
     ]
     if not warnings:
-        st.session_state[cache_key] = {"retailers": ordered, "warnings": warnings}
+        st.session_state[cache_key] = {"skus": ordered, "warnings": warnings}
     return ordered, warnings
 
 
@@ -322,22 +347,11 @@ def render_hypotheses(agent, filter_values: dict) -> None:
         if st.session_state.get("hypothesis_brand") not in brands:
             st.session_state["hypothesis_brand"] = brands[0] if brands else None
         brand = st.selectbox("Brand", brands, key="hypothesis_brand")
-        with st.spinner("Loading valid SKUs for this brand..."):
-            skus, retailers, hierarchy_warnings = _brand_filter_hierarchy(
+        with st.spinner("Loading valid retailers and SKUs for this brand..."):
+            brand_skus, retailers, hierarchy_warnings = _brand_filter_hierarchy(
                 agent, brand, catalog_retailers
             )
-        selected_sku_state = st.session_state.get("hypothesis_skus", [])
-        valid_selected_skus = [sku for sku in selected_sku_state if sku in skus]
-        if valid_selected_skus != selected_sku_state:
-            st.session_state["hypothesis_skus"] = valid_selected_skus or skus[:1]
         c2, c3 = st.columns(2)
-        selected_skus = c2.multiselect(
-            "SKUs", skus, default=skus[:1], key="hypothesis_skus"
-        )
-        with st.spinner("Checking retailer availability for the selected SKUs..."):
-            retailers, retailer_warnings = _scope_retailers(
-                agent, brand, selected_skus, retailers
-            )
         selected_retailer_state = st.session_state.get("hypothesis_retailers", [])
         valid_selected_retailers = [
             retailer for retailer in selected_retailer_state if retailer in retailers
@@ -346,11 +360,22 @@ def render_hypotheses(agent, filter_values: dict) -> None:
             st.session_state["hypothesis_retailers"] = (
                 valid_selected_retailers or retailers[:1]
             )
-        selected_retailers = c3.multiselect(
+        selected_retailers = c2.multiselect(
             "Retailers", retailers, default=retailers[:1], key="hypothesis_retailers"
         )
+        with st.spinner("Loading SKUs available at every selected retailer..."):
+            skus, sku_warnings = _scope_skus(
+                agent, brand, selected_retailers, brand_skus
+            )
+        selected_sku_state = st.session_state.get("hypothesis_skus", [])
+        valid_selected_skus = [sku for sku in selected_sku_state if sku in skus]
+        if valid_selected_skus != selected_sku_state:
+            st.session_state["hypothesis_skus"] = valid_selected_skus or skus[:1]
+        selected_skus = c3.multiselect(
+            "SKUs", skus, default=skus[:1], key="hypothesis_skus"
+        )
         combination_count = len(selected_skus) * len(selected_retailers)
-        for warning in [*hierarchy_warnings, *retailer_warnings]:
+        for warning in [*hierarchy_warnings, *sku_warnings]:
             st.warning(warning)
         st.caption(
             f"{combination_count} SKU-retailer combination(s) selected. The agent "
