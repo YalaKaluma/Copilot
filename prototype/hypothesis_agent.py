@@ -41,7 +41,7 @@ HYPOTHESIS_SCHEMA = {
                                 "finding": {"type": "string"},
                                 "interpretation": {"type": "string"},
                                 "strength": {"type": "string", "enum": ["Strong", "Moderate", "Weak"]},
-                                "source": {"type": "string", "enum": ["Market Landscape", "Brand Ladder", "Price Pack Curve"]},
+                                "source": {"type": "string", "enum": ["Market Landscape", "Price Ladder", "Price Pack Curve"]},
                                 "scope": {"type": "string"},
                             },
                             "required": ["direction", "finding", "interpretation", "strength", "source", "scope"],
@@ -76,7 +76,7 @@ class PricingHypothesisAgent:
             "market_landscape_overall": lambda: self.service.get_market_landscape(
                 split_by="brand"
             ),
-            "brand_ladder_overall": lambda: self.service.get_price_ladder(),
+            "price_ladder_overall": lambda: self.service.get_price_ladder(),
             "price_pack_curve": lambda: self.service.get_price_pack_curve(
                 brands=brand_filter
             ),
@@ -86,6 +86,9 @@ class PricingHypothesisAgent:
                 lambda: self.service.get_market_landscape(
                     split_by="brand", retailers=retailer_filter
                 )
+            )
+            source_calls["price_ladder_selected_retailer"] = (
+                lambda: self.service.get_price_ladder(retailers=retailer_filter)
             )
         raw: dict[str, Any] = {}
         errors: dict[str, str] = {}
@@ -120,7 +123,7 @@ class PricingHypothesisAgent:
             "sku_id": sku_id or "All SKUs",
             "retailer": retailer or "All retailers",
             "scope_note": (
-                "Retailer applies to Market Landscape and Brand Ladder. "
+                "Retailer applies to Market Landscape and Price Ladder. "
                 "Price Pack Curve is retrieved for the full selected brand so the "
                 "selected SKU can be assessed against its same-brand pack architecture; "
                 "it does not support retailer filtering."
@@ -136,7 +139,7 @@ class PricingHypothesisAgent:
                         "Use pricing language only. Do not propose promotion mechanics, promotional frequency, trade terms, assortment, mix actions, or generic audits as the opportunity. "
                         "Every hypothesis must contain supporting evidence and counterevidence when the data allows it. Weak or missing evidence should lower confidence, not create a different hypothesis. Never invent elasticity, causality, willingness to pay, financial value, or missing fields. "
                         "Assess competitive price positioning versus SKUs/brands, growth patterns, share patterns, within-brand pack-price consistency, and differences between overall-market and selected-retailer results. The selected SKU is the analytical focus inside the full-brand Price Pack Curve; do not ignore the other same-brand packs. "
-                        "Use Market Landscape for share/growth/market price context, Brand Ladder for competitive average-price positioning, and Price Pack Curve for pack architecture. "
+                        "Use Market Landscape for share/growth/market price context, Price Ladder for competitive average-price positioning, and Price Pack Curve for pack architecture. "
                         "Average prices can reflect pack and mix. Estimated value must be 'Not quantified' unless the payload directly supports a defensible value; explain the basis. "
                         "Unavailable or empty sources are data limitations and must never be cited as positive or negative proof. If selected SKU ownership is false or unverified, explicitly make that strong counterevidence for both actions. "
                         "Priority combines evidence confidence, potential materiality, and actionability. Findings must cite actual values from the payload."

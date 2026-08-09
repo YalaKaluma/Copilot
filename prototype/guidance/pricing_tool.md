@@ -1,6 +1,6 @@
 # SKAI pricing ladder and simulator
 
-`get_price_ladder` calls `GET /api/v1/pricing/brand-ladder`. It supports brand,
+`get_price_ladder` calls `GET /api/v1/pricing/price-ladder`. It supports brand,
 subcategory, retailer, and SKU filters and returns brand prices, volume, sales,
 and sales-value share. For a requested brand's positioning, put that brand in
 the plan's `brands` list. The execution layer retrieves the full competitive

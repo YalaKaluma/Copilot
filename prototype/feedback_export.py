@@ -319,7 +319,7 @@ def build_hypothesis_feedback_workbook(
     source_status.append(["Source", "Status", "Error / limitation", "Raw response"])
     for source in (
         "market_landscape_overall", "market_landscape_selected_retailer",
-        "brand_ladder_overall", "brand_ladder_selected_retailer", "price_pack_curve",
+        "price_ladder_overall", "price_ladder_selected_retailer", "price_pack_curve",
     ):
         status = "Unavailable" if source in source_errors else "Available" if source in raw_evidence else "Not requested"
         source_status.append([

@@ -239,8 +239,9 @@ def render_hypotheses(agent, filter_values: dict) -> None:
             "Retailer", ["All retailers", *retailers], key="hypothesis_retailer"
         )
         st.caption(
-            "Retailer filters Market Landscape. Price Pack Curve retrieves the full "
-            "selected-brand architecture and uses the selected SKU as the focus."
+            "Retailer filters Market Landscape and Price Ladder. Price Pack Curve "
+            "retrieves the full selected-brand architecture and uses the selected "
+            "SKU as the focus."
         )
         run_scan = st.button(
             "Generate hypotheses",
@@ -263,7 +264,7 @@ def render_hypotheses(agent, filter_values: dict) -> None:
             expanded=True,
         ) as status:
             st.write("Reading Market Landscape")
-            st.write("Reading Brand Ladder")
+            st.write("Reading Price Ladder")
             st.write("Reading Price Pack Curve")
             result, raw = agent.investigate(
                 brand=None if brand == "All brands" else brand,

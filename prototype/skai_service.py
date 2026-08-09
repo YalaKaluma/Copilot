@@ -129,7 +129,7 @@ class SkaiGrowthService:
         }
         return self._request(
             "GET",
-            "/api/v1/pricing/brand-ladder",
+            "/api/v1/pricing/price-ladder",
             params=params,
             market_api=True,
         )

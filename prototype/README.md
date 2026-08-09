@@ -17,7 +17,7 @@ sell-in story. The pricing simulator remains behind the experience rather than
 being exposed as a user-operated screen.
 
 The prototype supports `GET /api/v1/promo/heatmap`,
-`GET /api/v1/pricing/market-landscape`, `GET /api/v1/pricing/brand-ladder`,
+`GET /api/v1/pricing/market-landscape`, `GET /api/v1/pricing/price-ladder`,
 `GET /api/v1/pricing/price-pack-curve`,
 `GET /api/v1/pricing/simulator/base`, and
 `POST /api/v1/pricing/simulator/run`. It also calls `GET /api/v1/filter-values` so
