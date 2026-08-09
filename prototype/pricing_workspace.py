@@ -107,19 +107,10 @@ def render_home(connected: bool, tenant: str | None) -> None:
     for col, (label, value) in zip(cols, metrics):
         with col:
             st.metric(label, value)
-    left, right = st.columns([1, 1.35])
-    with left:
-        st.subheader("Workspace status")
-        st.success("SKAI data connected" if connected else "SKAI connection required")
-        st.info("OpenAI configured" if bool(st.session_state.get("workspace_openai_key")) else "OpenAI key is available in Connection settings")
-        st.caption("Credentials, API settings and workspace selection are managed on the Connection page.")
-    with right:
-        st.subheader("Current analysis scope")
-        scope = {
-            "Market": "US", "Category": "Mexican shelf-stable food", "Brand": "La Costeña",
-            "Retailer": "Total market", "Period": "Latest 52 weeks", "Workspace": (tenant or "Not selected").replace("_", " ").title(),
-        }
-        st.dataframe([scope], use_container_width=True, hide_index=True)
+    st.subheader("Workspace status")
+    st.success("SKAI data connected" if connected else "SKAI connection required")
+    st.info("OpenAI configured" if bool(st.session_state.get("workspace_openai_key")) else "OpenAI key is available in Connection settings")
+    st.caption("Credentials, API settings and workspace selection are managed on the Connection page.")
 
 
 def render_hypotheses() -> None:
