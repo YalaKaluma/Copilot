@@ -4,7 +4,10 @@ These rules incorporate reviewed hypothesis and evidence feedback.
 
 ## Allowed hypotheses
 
-- Produce exactly two directional hypotheses: increase price and decrease price.
+- Evaluate increase price and decrease price internally for every SKU-retailer
+  combination, but surface only the direction with the higher evidence-based
+  confidence.
+- Never display both directions for the same SKU-retailer combination.
 - Promotion, trade terms, assortment, and mix are not pricing hypotheses.
 
 ## Evidence construction

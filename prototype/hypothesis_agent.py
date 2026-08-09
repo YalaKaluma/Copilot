@@ -23,12 +23,14 @@ HYPOTHESIS_SCHEMA = {
         "data_limitations": {"type": "array", "items": {"type": "string"}},
         "hypotheses": {
             "type": "array",
-            "minItems": 2,
-            "maxItems": 2,
+            "minItems": 1,
+            "maxItems": 1,
             "items": {
                 "type": "object",
                 "properties": {
                     "id": {"type": "string"},
+                    "sku_id": {"type": "string"},
+                    "retailer": {"type": "string"},
                     "direction": {"type": "string", "enum": ["Increase price", "Decrease price"]},
                     "statement": {"type": "string"},
                     "opportunity": {"type": "string"},
@@ -54,7 +56,7 @@ HYPOTHESIS_SCHEMA = {
                         },
                     },
                 },
-                "required": ["id", "direction", "statement", "opportunity", "confidence", "priority", "estimated_value", "value_basis", "evidence_status", "evidence"],
+                "required": ["id", "sku_id", "retailer", "direction", "statement", "opportunity", "confidence", "priority", "estimated_value", "value_basis", "evidence_status", "evidence"],
                 "additionalProperties": False,
             },
         },
@@ -178,7 +180,7 @@ class PricingHypothesisAgent:
                 {
                     "role": "system",
                     "content": (
-                        "You are a rigorous RGM pricing hypothesis agent. Return exactly two directional hypotheses and no other commercial lever: H-PRICE-UP tests an INCREASE in price; H-PRICE-DOWN tests a DECREASE in price. "
+                        "You are a rigorous RGM pricing hypothesis agent. Internally evaluate both an INCREASE and a DECREASE in price for the selected SKU-retailer combination, then return exactly ONE hypothesis: the direction with the higher evidence-based probability. Never return both directions for the same combination. Use H-PRICE-UP for an increase or H-PRICE-DOWN for a decrease, and copy the selected sku_id and retailer exactly into the output. "
                         "Use pricing language only. Do not propose promotion mechanics, promotional frequency, trade terms, assortment, mix actions, or generic audits as the opportunity. "
                         "Every hypothesis must contain supporting evidence and counterevidence when the data allows it. Weak or missing evidence should lower confidence, not create a different hypothesis. Never invent elasticity, causality, willingness to pay, financial value, or missing fields. "
                         "Assess competitive price positioning versus SKUs/brands, growth patterns, share patterns, within-brand pack-price consistency, and differences across the selected and comparison retailers. The selected SKU is the analytical focus inside the full-brand Price Pack Curve; compare its price with relevant same-brand pack sizes and explain whether the internal architecture is coherent. "
@@ -189,7 +191,7 @@ class PricingHypothesisAgent:
                         "Translate technical Price Ladder fields into plain commercial language. Do not say 'retailer-gap contribution' without explanation; say that a retailer prices the brand above or below its overall benchmark and give the magnitude and basis. "
                         "Average prices can reflect pack and mix. Estimated value must be 'Not quantified' unless the payload directly supports a defensible value; explain the basis. "
                         "Unavailable or empty sources are data limitations and must never be cited as positive or negative proof. If selected SKU ownership is false or unverified, explicitly make that strong counterevidence for both actions. "
-                        "Priority combines evidence confidence, potential materiality, and actionability. Findings must cite actual values from the payload.\n\n"
+                        "Confidence is the calibrated probability that the surfaced direction is the better of the two price actions given available evidence. Priority must equal confidence so hypotheses can be ranked consistently across SKU-retailer combinations. Findings must cite actual values from the payload.\n\n"
                         + GUIDANCE_FILE.read_text(encoding="utf-8")
                     ),
                 },

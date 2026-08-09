@@ -234,20 +234,22 @@ def render_hypotheses(agent, filter_values: dict) -> None:
         )
         c1, c2, c3 = st.columns(3)
         brand = c1.selectbox("Brand", ["All brands", *brands], key="hypothesis_brand")
-        sku = c2.selectbox("SKU", ["All SKUs", *skus], key="hypothesis_sku")
-        retailer = c3.selectbox(
-            "Retailer", ["All retailers", *retailers], key="hypothesis_retailer"
+        selected_skus = c2.multiselect(
+            "SKUs", skus, default=skus[:1], key="hypothesis_skus"
         )
+        selected_retailers = c3.multiselect(
+            "Retailers", retailers, default=retailers[:1], key="hypothesis_retailers"
+        )
+        combination_count = len(selected_skus) * len(selected_retailers)
         st.caption(
-            "Retailer filters Market Landscape and Price Ladder. Price Pack Curve "
-            "retrieves the full selected-brand architecture and uses the selected "
-            "SKU as the focus."
+            f"{combination_count} SKU-retailer combination(s) selected. The agent "
+            "will retain one winning price direction for each combination."
         )
         run_scan = st.button(
             "Generate hypotheses",
             type="primary",
             use_container_width=True,
-            disabled=lever != "Pricing",
+            disabled=(lever != "Pricing" or combination_count == 0),
         )
 
     if lever != "Pricing":
@@ -266,38 +268,58 @@ def render_hypotheses(agent, filter_values: dict) -> None:
             st.write("Reading Market Landscape")
             st.write("Reading Price Ladder")
             st.write("Reading Price Pack Curve")
-            selected_retailer = None if retailer == "All retailers" else retailer
-            peer_retailers = [
-                candidate
-                for candidate in retailers
-                if candidate != selected_retailer
-            ][:4]
-            st.write(
-                "Comparing price position across "
-                f"{len(peer_retailers) + (1 if selected_retailer else 0)} retailers"
-            )
-            result, raw = agent.investigate(
-                brand=None if brand == "All brands" else brand,
-                sku_id=None if sku == "All SKUs" else sku,
-                retailer=selected_retailer,
-                comparison_retailers=peer_retailers,
-            )
-            st.session_state.generated_hypotheses = result.get("hypotheses", [])
+            generated, limitations, errors, raw_evidence = [], [], {}, {}
+            progress = st.progress(0, text="Starting perimeter scan")
+            combinations = [
+                (sku_id, retailer_id)
+                for sku_id in selected_skus
+                for retailer_id in selected_retailers
+            ]
+            for position, (sku_id, retailer_id) in enumerate(combinations, start=1):
+                progress.progress(
+                    (position - 1) / len(combinations),
+                    text=f"Analyzing {sku_id} at {retailer_id}",
+                )
+                peers = [
+                    candidate for candidate in retailers if candidate != retailer_id
+                ][:4]
+                scope_key = f"{sku_id} | {retailer_id}"
+                try:
+                    result, raw = agent.investigate(
+                        brand=None if brand == "All brands" else brand,
+                        sku_id=sku_id,
+                        retailer=retailer_id,
+                        comparison_retailers=peers,
+                    )
+                except Exception as exc:
+                    errors[f"{scope_key} / hypothesis generation"] = str(exc)
+                    continue
+                raw_evidence[scope_key] = raw
+                for hypothesis in result.get("hypotheses", []):
+                    hypothesis["sku_id"] = sku_id
+                    hypothesis["retailer"] = retailer_id
+                    hypothesis["id"] = f'{hypothesis.get("id", "H-PRICE")}-{position:03d}'
+                    generated.append(hypothesis)
+                limitations.extend(
+                    f"{scope_key}: {item}"
+                    for item in result.get("data_limitations", [])
+                )
+                errors.update(
+                    {f"{scope_key} / {source}": error for source, error in raw.get("source_errors", {}).items()}
+                )
+            progress.progress(1.0, text="Perimeter scan complete")
+            st.session_state.generated_hypotheses = generated
             st.session_state.hypothesis_scan_scope = {
                 "brand": brand,
-                "sku": sku,
-                "retailer": retailer,
-                "comparison_retailers": peer_retailers,
+                "skus": selected_skus,
+                "retailers": selected_retailers,
+                "combination_count": combination_count,
                 "lever": lever,
-                "summary": result.get("scope_summary", ""),
+                "summary": f"Generated {len(generated)} ranked hypotheses across {combination_count} selected combinations.",
             }
-            st.session_state.hypothesis_scan_limitations = result.get(
-                "data_limitations", []
-            )
-            st.session_state.hypothesis_raw_evidence = raw
-            st.session_state.hypothesis_source_errors = raw.get(
-                "source_errors", {}
-            )
+            st.session_state.hypothesis_scan_limitations = limitations
+            st.session_state.hypothesis_raw_evidence = raw_evidence
+            st.session_state.hypothesis_source_errors = errors
             status.update(
                 label="Hypothesis generation complete",
                 state="complete",
@@ -306,17 +328,18 @@ def render_hypotheses(agent, filter_values: dict) -> None:
 
     hypotheses = sorted(
         st.session_state.generated_hypotheses,
-        key=lambda item: item.get("priority", 0),
+        key=lambda item: item.get("confidence", 0),
         reverse=True,
     )
     if not hypotheses:
-        st.info("Choose a scope and run the first live pricing opportunity scan.")
+        for source, error in st.session_state.hypothesis_source_errors.items():
+            st.warning(f"{source}: {error}")
+        st.info("Select at least one SKU and retailer, then generate hypotheses.")
         return
 
     scope = st.session_state.hypothesis_scan_scope
     st.caption(
-        f'LAST SCAN - {scope.get("brand")} - {scope.get("sku")} - '
-        f'{scope.get("retailer")}'
+        f'LAST SCAN - {scope.get("brand")} - {scope.get("combination_count", 0)} COMBINATIONS'
     )
     if scope.get("summary"):
         st.write(scope["summary"])
@@ -333,9 +356,14 @@ def render_hypotheses(agent, filter_values: dict) -> None:
         disposition = st.session_state.pricing_dispositions.get(
             hypothesis_id, "Review"
         )
-        with st.container(border=True):
+        label = (
+            f'#{index + 1} · {hypothesis.get("direction", "Price adjustment")} · '
+            f'{hypothesis.get("sku_id", "SKU")} · {hypothesis.get("retailer", "Retailer")} · '
+            f'{hypothesis.get("confidence", 0)}% confidence'
+        )
+        with st.expander(label, expanded=False):
             st.caption(
-                f'{hypothesis_id} - PRIORITY {hypothesis.get("priority", 0)} - '
+                f'{hypothesis_id} - RANK {index + 1} - '
                 f'{hypothesis.get("evidence_status", "Mixed").upper()}'
             )
             st.markdown(f'**Direction: {hypothesis.get("direction", "Pricing adjustment")}**')
@@ -410,6 +438,12 @@ def render_hypotheses(agent, filter_values: dict) -> None:
                     "selected": "Balanced",
                     "scenarios": deepcopy(SCENARIOS),
                 }
+                st.session_state.pricing_opportunities[opportunity_id]["scope"].update(
+                    {
+                        "sku": hypothesis.get("sku_id"),
+                        "retailer": hypothesis.get("retailer"),
+                    }
+                )
                 st.rerun()
             if reject.button(
                 "Reject", key=f"reject-{hypothesis_id}", use_container_width=True

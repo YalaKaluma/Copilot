@@ -289,7 +289,8 @@ def build_hypothesis_feedback_workbook(
             hypothesis.get("opportunity"), hypothesis.get("evidence_status"),
             hypothesis.get("confidence"), hypothesis.get("priority"),
             hypothesis.get("estimated_value"), hypothesis.get("value_basis"),
-            scope.get("brand"), scope.get("sku"), scope.get("retailer"),
+            scope.get("brand"), hypothesis.get("sku_id") or scope.get("sku"),
+            hypothesis.get("retailer") or scope.get("retailer"),
             "", "", "", "", "", "Not reviewed",
         ])
 
@@ -312,7 +313,8 @@ def build_hypothesis_feedback_workbook(
                 hypothesis.get("direction"), evidence.get("direction"),
                 evidence.get("finding"), evidence.get("interpretation"),
                 evidence.get("strength"), evidence.get("source"), evidence.get("scope"),
-                scope.get("brand"), scope.get("sku"), scope.get("retailer"),
+                scope.get("brand"), hypothesis.get("sku_id") or scope.get("sku"),
+                hypothesis.get("retailer") or scope.get("retailer"),
                 "", "", "", "", "", "", "", "Not reviewed",
             ])
 

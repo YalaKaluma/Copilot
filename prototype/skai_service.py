@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -24,6 +25,9 @@ class SkaiGrowthService:
     timeout: float = 45.0
     _client: httpx.Client = field(init=False, repr=False)
     _market_client: httpx.Client = field(init=False, repr=False)
+    _response_cache: dict[str, dict[str, Any]] = field(
+        init=False, repr=False, default_factory=dict
+    )
 
     def __post_init__(self) -> None:
         headers: dict[str, str] = {"Accept": "application/json"}
@@ -113,11 +117,8 @@ class SkaiGrowthService:
             for key, value in filters.items()
             if value is not None and value != [] and value != ""
         }
-        return self._request(
-            "GET",
-            "/api/v1/pricing/market-landscape",
-            params=params,
-            market_api=True,
+        return self._cached_pricing_get(
+            "/api/v1/pricing/market-landscape", params
         )
 
     def get_price_ladder(self, **filters: Any) -> dict[str, Any]:
@@ -127,12 +128,7 @@ class SkaiGrowthService:
             for key, value in filters.items()
             if value is not None and value != [] and value != ""
         }
-        return self._request(
-            "GET",
-            "/api/v1/pricing/price-ladder",
-            params=params,
-            market_api=True,
-        )
+        return self._cached_pricing_get("/api/v1/pricing/price-ladder", params)
 
     def get_price_pack_curve(self, **filters: Any) -> dict[str, Any]:
         """Return pack-size price architecture, gaps, and competitive clusters."""
@@ -141,12 +137,20 @@ class SkaiGrowthService:
             for key, value in filters.items()
             if value is not None and value != [] and value != ""
         }
-        return self._request(
-            "GET",
-            "/api/v1/pricing/price-pack-curve",
-            params=params,
-            market_api=True,
+        return self._cached_pricing_get(
+            "/api/v1/pricing/price-pack-curve", params
         )
+
+    def _cached_pricing_get(
+        self, path: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Reuse identical read-only pricing evidence during a perimeter scan."""
+        cache_key = f"{path}:{json.dumps(params, sort_keys=True, default=str)}"
+        if cache_key not in self._response_cache:
+            self._response_cache[cache_key] = self._request(
+                "GET", path, params=params, market_api=True
+            )
+        return self._response_cache[cache_key]
 
     def get_simulator_base(self, **filters: Any) -> dict[str, Any]:
         """Return the SKU/product IDs and current values required to simulate."""
