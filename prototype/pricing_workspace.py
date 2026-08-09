@@ -239,8 +239,8 @@ def render_hypotheses(agent, filter_values: dict) -> None:
             "Retailer", ["All retailers", *retailers], key="hypothesis_retailer"
         )
         st.caption(
-            "Retailer filters Market Landscape and Brand Ladder. Price Pack Curve "
-            "currently supports brand and SKU scope."
+            "Retailer filters Market Landscape. Price Pack Curve retrieves the full "
+            "selected-brand architecture and uses the selected SKU as the focus."
         )
         run_scan = st.button(
             "Generate hypotheses",
@@ -286,7 +286,7 @@ def render_hypotheses(agent, filter_values: dict) -> None:
                 "source_errors", {}
             )
             status.update(
-                label="Pricing opportunity scan complete",
+                label="Hypothesis generation complete",
                 state="complete",
                 expanded=False,
             )
