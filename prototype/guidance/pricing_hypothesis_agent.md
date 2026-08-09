@@ -20,13 +20,29 @@ These rules incorporate reviewed hypothesis and evidence feedback.
 ## Source roles
 
 - Market Landscape: brand-level sales growth, volume growth, share, and market
-  context. The current API cannot group Market Landscape by SKU.
+  context. The API cannot group by SKU, but it can filter by `sku_ids`; use a
+  selected-SKU-filtered brand row to compare SKU growth with total-brand growth.
 - Price Ladder: primary evidence for competitive price positioning. Compare the
   selected retailer with several other retailers and state whether the price
   gap is consistent.
 - Price Pack Curve: SKU growth and internal pack-price architecture. Compare the
-  selected SKU with relevant same-brand pack sizes; do not analyze the selected
-  point in isolation.
+  selected SKU with relevant same-brand pack sizes; inspect the SKU names and
+  IDs behind each pack point for product, formulation, format, and pack
+  differences. Do not analyze the selected point in isolation.
+
+## Comparison hierarchy
+
+- Lead with the selected retailer, then compare with the overall market and
+  peer retailers.
+- Explicitly label every observation as selected-retailer, overall-market, or
+  peer-retailer evidence.
+- Translate technical ladder fields into plain language. Instead of
+  `retailer-gap contribution`, say the retailer prices the brand above or below
+  its overall benchmark and state the magnitude and basis.
+- If nearby same-brand pack prices bracket the selected price, describe upward
+  headroom as limited. State that the architecture is inconsistent because the
+  price sequence is not monotonic, and identify the exact higher and lower
+  neighbors.
 
 ## Clarity
 

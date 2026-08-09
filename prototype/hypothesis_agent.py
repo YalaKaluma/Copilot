@@ -93,6 +93,12 @@ class PricingHypothesisAgent:
                 brands=brand_filter
             ),
         }
+        if sku_id:
+            source_calls["market_landscape_selected_sku_overall"] = (
+                lambda: self.service.get_market_landscape(
+                    split_by="brand", sku_ids=[sku_id]
+                )
+            )
         if retailer:
             source_calls["market_landscape_selected_retailer"] = (
                 lambda: self.service.get_market_landscape(
@@ -102,6 +108,14 @@ class PricingHypothesisAgent:
             source_calls["price_ladder_selected_retailer"] = (
                 lambda: self.service.get_price_ladder(retailers=retailer_filter)
             )
+            if sku_id:
+                source_calls["market_landscape_selected_sku_retailer"] = (
+                    lambda: self.service.get_market_landscape(
+                        split_by="brand",
+                        sku_ids=[sku_id],
+                        retailers=retailer_filter,
+                    )
+                )
         for peer_retailer in (comparison_retailers or [])[:4]:
             source_calls[f"market_landscape_peer::{peer_retailer}"] = (
                 lambda peer=peer_retailer: self.service.get_market_landscape(
@@ -170,7 +184,9 @@ class PricingHypothesisAgent:
                         "Assess competitive price positioning versus SKUs/brands, growth patterns, share patterns, within-brand pack-price consistency, and differences across the selected and comparison retailers. The selected SKU is the analytical focus inside the full-brand Price Pack Curve; compare its price with relevant same-brand pack sizes and explain whether the internal architecture is coherent. "
                         "Use Market Landscape for share/growth/market price context, Price Ladder for competitive average-price positioning, and Price Pack Curve for pack architecture. "
                         "Evidence-card rules learned from reviewer feedback: each card must contain one coherent signal only. Never combine growth and share in one card when they point in opposite directions; create separate cards on opposite sides or omit the ambiguous combination. Say 'sales growth' or 'volume growth', never the vague word 'performance'. Use Price Ladder as the primary source for competitive positioning and check whether positioning is consistent across comparison retailers. Avoid unclear claims such as 'not an unambiguous low-price position'; instead state the exact relevant peer gap and its implication. "
-                        "Market Landscape does not support SKU grouping in this API. Use it for brand growth/share; use Price Pack Curve for SKU-level growth and pack architecture. "
+                        "For SKU-level Market Landscape evidence, use the selected-SKU-filtered source and explicitly compare that SKU's growth with the total brand at the selected retailer and overall market. Lead with the selected-retailer observation, then compare with overall and peer retailers. Label every price or growth figure as selected-retailer, overall-market, or peer-retailer. "
+                        "For Price Pack Curve, inspect the `skus` records behind neighboring pack points. Use explicit product/form/format differences visible in SKU IDs or names to qualify comparisons. If similar sizes are both above and below the selected price, say the architecture is inconsistent and explain exactly that the price sequence is not monotonic; describe upward headroom as limited, not broad. Do not assume an abbreviation's meaning unless the SKU name or identifier makes the distinction reasonably explicit. "
+                        "Translate technical Price Ladder fields into plain commercial language. Do not say 'retailer-gap contribution' without explanation; say that a retailer prices the brand above or below its overall benchmark and give the magnitude and basis. "
                         "Average prices can reflect pack and mix. Estimated value must be 'Not quantified' unless the payload directly supports a defensible value; explain the basis. "
                         "Unavailable or empty sources are data limitations and must never be cited as positive or negative proof. If selected SKU ownership is false or unverified, explicitly make that strong counterevidence for both actions. "
                         "Priority combines evidence confidence, potential materiality, and actionability. Findings must cite actual values from the payload.\n\n"
