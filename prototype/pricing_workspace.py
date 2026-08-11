@@ -87,6 +87,12 @@ def _card_end() -> None:
     st.markdown('</div>', unsafe_allow_html=True)
 
 
+def _display_text(value: object, fallback: str = "") -> str:
+    """Return agent text without inline-code highlighting."""
+    text = str(value or fallback)
+    return text.replace("`", "")
+
+
 def render_home(connected: bool, tenant: str | None) -> None:
     _header("Pricing workspace", "Your agent-led path from commercial hypothesis to customer-ready action.")
     live_hypotheses = st.session_state.get("generated_hypotheses", [])
@@ -148,18 +154,19 @@ def _render_hypothesis_detail(h: dict) -> None:
     m1.metric("Confidence", f'{h["confidence"]}%')
     m2.metric("Estimated value", h["value"])
     m3.metric("Priority", h["priority"])
-    support, counter = st.columns(2)
     supporting = [e for e in h["evidence"] if e[2] == "Supports"]
     opposing = [e for e in h["evidence"] if e[2] != "Supports"]
-    for column, title, evidence in ((support, "Supporting evidence", supporting), (counter, "Counterevidence & gaps", opposing)):
-        with column:
-            st.subheader(title)
-            for finding, interpretation, direction, strength, source in evidence:
-                with st.container(border=True):
-                    st.caption(f"{direction.upper()} · {strength} · {source}")
-                    st.markdown(f"**{finding}**")
-                    st.write(interpretation)
-                    st.caption(f'{h["scope"]} · {h["period"]}')
+    for title, evidence in (
+        ("Supporting evidence", supporting),
+        ("Counterevidence & gaps", opposing),
+    ):
+        st.subheader(title)
+        for finding, interpretation, direction, strength, source in evidence:
+            with st.container(border=True):
+                st.caption(f"{direction.upper()} · {strength} · {source}")
+                st.write(_display_text(finding))
+                st.write(_display_text(interpretation))
+                st.caption(f'{h["scope"]} · {h["period"]}')
     st.subheader("Tests and limitations")
     st.write(" · ".join(h["tests"]))
     st.warning(h["missing"])
@@ -468,15 +475,19 @@ def render_hypotheses(agent, filter_values: dict) -> None:
     st.caption(
         f'LAST SCAN - {scope.get("brand")} - {scope.get("combination_count", 0)} COMBINATIONS'
     )
-    if scope.get("summary"):
-        st.write(scope["summary"])
-    for limitation in st.session_state.hypothesis_scan_limitations:
-        st.warning(limitation)
-    for source, error in st.session_state.hypothesis_source_errors.items():
-        st.warning(
-            f'{source.replace("_", " ").title()} was unavailable; the scan '
-            f'continued with the remaining sources. {error}'
-        )
+    limitations = st.session_state.hypothesis_scan_limitations
+    source_errors = st.session_state.hypothesis_source_errors
+    if scope.get("summary") or limitations or source_errors:
+        with st.expander("Analysis limitations", expanded=False):
+            if scope.get("summary"):
+                st.write(_display_text(scope["summary"]))
+            for limitation in limitations:
+                st.warning(_display_text(limitation))
+            for source, error in source_errors.items():
+                st.warning(
+                    f'{source.replace("_", " ").title()} was unavailable; the scan '
+                    f'continued with the remaining sources. {_display_text(error)}'
+                )
 
     for index, hypothesis in enumerate(hypotheses):
         hypothesis_id = hypothesis.get("id") or f"LIVE-{index + 1}"
@@ -494,8 +505,10 @@ def render_hypotheses(agent, filter_values: dict) -> None:
                 f'{hypothesis.get("evidence_status", "Mixed").upper()}'
             )
             st.markdown(f'**Direction: {hypothesis.get("direction", "Pricing adjustment")}**')
-            st.subheader(hypothesis.get("statement", "Pricing opportunity"))
-            st.write(hypothesis.get("opportunity", ""))
+            st.subheader(
+                _display_text(hypothesis.get("statement"), "Pricing opportunity")
+            )
+            st.write(_display_text(hypothesis.get("opportunity")))
             m1, m2, m3 = st.columns(3)
             m1.metric("Confidence", f'{hypothesis.get("confidence", 0)}%')
             m2.metric(
@@ -516,25 +529,25 @@ def render_hypotheses(agent, filter_values: dict) -> None:
                 for item in evidence
                 if item.get("direction") == "Counterevidence"
             ]
-            support_col, counter_col = st.columns(2)
-            for column, title, cards in (
-                (support_col, "Supporting evidence", supporting),
-                (counter_col, "Counterevidence", opposing),
+            for title, cards in (
+                ("Supporting evidence", supporting),
+                ("Counterevidence", opposing),
             ):
-                with column:
-                    st.markdown(f"**{title}**")
-                    if not cards:
-                        st.caption("No evidence card returned for this side.")
-                    for evidence_card in cards:
-                        with st.container(border=True):
-                            strength = str(evidence_card.get("strength", "")).upper()
-                            source = evidence_card.get("source", "")
-                            st.caption(f"{strength} - {source}")
-                            st.markdown(
-                                f'**{evidence_card.get("finding", "Finding")}**'
-                            )
-                            st.write(evidence_card.get("interpretation", ""))
-                            st.caption(evidence_card.get("scope", ""))
+                st.subheader(title)
+                if not cards:
+                    st.caption("No evidence returned for this section.")
+                for evidence_card in cards:
+                    with st.container(border=True):
+                        strength = str(evidence_card.get("strength", "")).upper()
+                        source = evidence_card.get("source", "")
+                        st.caption(f"{strength} - {source}")
+                        st.write(
+                            _display_text(evidence_card.get("finding"), "Finding")
+                        )
+                        st.write(
+                            _display_text(evidence_card.get("interpretation"))
+                        )
+                        st.caption(_display_text(evidence_card.get("scope")))
 
             accept, reject, _ = st.columns([1, 1, 3])
             if accept.button(
