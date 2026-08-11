@@ -76,7 +76,10 @@ st.markdown(
         border-right: 1px solid var(--sk-line);
     }
     [data-testid="stSidebar"] > div:first-child {
-        padding-top: .35rem;
+        padding-top: 0;
+    }
+    [data-testid="stSidebarUserContent"] {
+        padding-top: 0 !important;
     }
     [data-testid="stSidebar"] h2 {
         color: var(--sk-ink);
@@ -108,11 +111,18 @@ st.markdown(
     h1, h2, h3, p, label, .stMarkdown { color: var(--sk-ink); }
 
     .sk-brand {
+        position: fixed;
+        top: .35rem;
+        left: 1.25rem;
+        z-index: 1001;
         display: flex;
         align-items: center;
         gap: .7rem;
         min-height: 40px;
         margin-top: 0;
+    }
+    [data-testid="stMarkdownContainer"]:has(.sk-brand) {
+        min-height: 3.2rem;
     }
     .sk-mark {
         position: relative;
