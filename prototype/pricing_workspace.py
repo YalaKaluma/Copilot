@@ -491,9 +491,6 @@ def render_hypotheses(agent, filter_values: dict) -> None:
 
     for index, hypothesis in enumerate(hypotheses):
         hypothesis_id = hypothesis.get("id") or f"LIVE-{index + 1}"
-        disposition = st.session_state.pricing_dispositions.get(
-            hypothesis_id, "Review"
-        )
         label = (
             f'#{index + 1} · {hypothesis.get("direction", "Price adjustment")} · '
             f'{hypothesis.get("sku_id", "SKU")} · {hypothesis.get("retailer", "Retailer")} · '
@@ -504,21 +501,19 @@ def render_hypotheses(agent, filter_values: dict) -> None:
                 f'{hypothesis_id} - RANK {index + 1} - '
                 f'{hypothesis.get("evidence_status", "Mixed").upper()}'
             )
-            st.markdown(f'**Direction: {hypothesis.get("direction", "Pricing adjustment")}**')
+            direction_col, confidence_col = st.columns([4, 1])
+            direction_col.markdown(
+                f'**Direction: {hypothesis.get("direction", "Pricing adjustment")}**'
+            )
+            confidence_col.markdown(
+                '<div style="text-align:right;font-weight:700">'
+                f'{hypothesis.get("confidence", 0)}% confidence</div>',
+                unsafe_allow_html=True,
+            )
             st.subheader(
                 _display_text(hypothesis.get("statement"), "Pricing opportunity")
             )
             st.write(_display_text(hypothesis.get("opportunity")))
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Confidence", f'{hypothesis.get("confidence", 0)}%')
-            m2.metric(
-                "Estimated value",
-                hypothesis.get("estimated_value", "Not quantified"),
-            )
-            m3.metric("Decision", disposition)
-            st.caption(
-                f'Value basis: {hypothesis.get("value_basis", "Not provided")}'
-            )
 
             evidence = hypothesis.get("evidence", [])
             supporting = [
@@ -538,16 +533,28 @@ def render_hypotheses(agent, filter_values: dict) -> None:
                     st.caption("No evidence returned for this section.")
                 for evidence_card in cards:
                     with st.container(border=True):
-                        strength = str(evidence_card.get("strength", "")).upper()
-                        source = evidence_card.get("source", "")
-                        st.caption(f"{strength} - {source}")
                         st.write(
                             _display_text(evidence_card.get("finding"), "Finding")
                         )
-                        st.write(
-                            _display_text(evidence_card.get("interpretation"))
-                        )
-                        st.caption(_display_text(evidence_card.get("scope")))
+                        with st.expander("Evidence details", expanded=False):
+                            strength = str(
+                                evidence_card.get("strength", "")
+                            ).upper()
+                            source = _display_text(evidence_card.get("source"))
+                            if strength or source:
+                                st.caption(
+                                    " · ".join(
+                                        item for item in (strength, source) if item
+                                    )
+                                )
+                            interpretation = _display_text(
+                                evidence_card.get("interpretation")
+                            )
+                            if interpretation:
+                                st.write(interpretation)
+                            scope_text = _display_text(evidence_card.get("scope"))
+                            if scope_text:
+                                st.caption(scope_text)
 
             accept, reject, _ = st.columns([1, 1, 3])
             if accept.button(
