@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from datetime import date
@@ -88,9 +89,10 @@ def _card_end() -> None:
 
 
 def _display_text(value: object, fallback: str = "") -> str:
-    """Return agent text without inline-code highlighting."""
+    """Return agent text without inline-code or currency-math highlighting."""
     text = str(value or fallback)
-    return text.replace("`", "")
+    text = text.replace("`", "")
+    return re.sub(r"(?<!\\)\$", r"\\$", text)
 
 
 def render_home(connected: bool, tenant: str | None) -> None:
@@ -510,10 +512,9 @@ def render_hypotheses(agent, filter_values: dict) -> None:
                 f'{hypothesis.get("confidence", 0)}% confidence</div>',
                 unsafe_allow_html=True,
             )
-            st.subheader(
-                _display_text(hypothesis.get("statement"), "Pricing opportunity")
+            st.markdown(
+                f'**{_display_text(hypothesis.get("opportunity"), "Pricing opportunity")}**'
             )
-            st.write(_display_text(hypothesis.get("opportunity")))
 
             evidence = hypothesis.get("evidence", [])
             supporting = [
@@ -531,10 +532,11 @@ def render_hypotheses(agent, filter_values: dict) -> None:
                 st.subheader(title)
                 if not cards:
                     st.caption("No evidence returned for this section.")
-                for evidence_card in cards:
+                for evidence_number, evidence_card in enumerate(cards, start=1):
                     with st.container(border=True):
-                        st.write(
-                            _display_text(evidence_card.get("finding"), "Finding")
+                        st.markdown(
+                            f'**{evidence_number}.** '
+                            f'{_display_text(evidence_card.get("finding"), "Finding")}'
                         )
                         with st.expander("Evidence details", expanded=False):
                             strength = str(

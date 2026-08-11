@@ -54,3 +54,16 @@ These rules incorporate reviewed hypothesis and evidence feedback.
   low-price position`.
 - If ownership, mapping, or source coverage is uncertain, treat it as explicit
   counterevidence and lower confidence.
+
+## Confidence calibration
+
+- Use the full confidence range rather than clustering cases around 60%.
+- 50–59: marginal evidence or an almost even choice between increase and decrease.
+- 60–69: mixed evidence with only a slight directional advantage.
+- 70–79: several reasonably consistent signals with manageable counterevidence.
+- 80–89: strong agreement across at least two relevant sources and limited
+  counterevidence.
+- 90–95: unusually complete and consistent SKU-retailer-specific evidence.
+- Penalize missing sources, brand-level proxies, uncertain SKU mapping,
+  contradictory retailer patterns, and non-comparable neighboring packs.
+- Do not exceed 95% for observational SKAI evidence.
