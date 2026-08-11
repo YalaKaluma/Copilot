@@ -123,6 +123,8 @@ class SkaiGrowthService:
 
     def get_price_ladder(self, **filters: Any) -> dict[str, Any]:
         """Return brand price positioning, share, sales, and volume."""
+        if "retailers" in filters:
+            filters["retailer_groups"] = filters.pop("retailers")
         params = {
             key: value
             for key, value in filters.items()

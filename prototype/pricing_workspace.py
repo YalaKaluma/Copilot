@@ -264,9 +264,13 @@ def _brand_filter_hierarchy(
 ) -> tuple[list[str], list[str], list[str]]:
     """Derive valid brand children because SKAI's filter catalog is flat."""
     tenant = st.session_state.get("selected_tenant_code") or "default"
-    cache_key = f"hypothesis_filter_hierarchy:v2:{tenant}:{brand}"
+    cache_key = f"hypothesis_filter_hierarchy:v3:{tenant}:{brand}"
+    overall_scope_key = f"hypothesis_hierarchy_uses_overall:{tenant}:{brand}"
     cached = st.session_state.get(cache_key)
     if isinstance(cached, dict):
+        st.session_state[overall_scope_key] = cached.get(
+            "uses_overall_scope", False
+        )
         return cached["skus"], cached["retailers"], cached.get("warnings", [])
 
     warnings: list[str] = []
@@ -303,12 +307,25 @@ def _brand_filter_hierarchy(
     valid_retailers = [
         retailer for retailer in catalog_retailers if retailer in valid_retailers
     ]
+    uses_overall_scope = bool(
+        valid_skus and catalog_retailers and not valid_retailers
+    )
+    if uses_overall_scope:
+        valid_retailers = list(catalog_retailers)
+        warnings.append(
+            "This workspace has no retailer-level Market Landscape coverage for "
+            f"{brand}. Retailers come from the workspace catalog and SKUs come "
+            "from the overall-market Price Pack Curve; retailer-specific evidence "
+            "may therefore be unavailable."
+        )
+    st.session_state[overall_scope_key] = uses_overall_scope
     hierarchy = {
         "skus": valid_skus,
         "retailers": valid_retailers,
         "warnings": warnings,
+        "uses_overall_scope": uses_overall_scope,
     }
-    if not warnings:
+    if uses_overall_scope or not warnings:
         st.session_state[cache_key] = hierarchy
     return valid_skus, valid_retailers, warnings
 
@@ -320,8 +337,14 @@ def _scope_skus(
     if not retailer_ids:
         return [], []
     tenant = st.session_state.get("selected_tenant_code") or "default"
+    overall_scope_key = f"hypothesis_hierarchy_uses_overall:{tenant}:{brand}"
+    if st.session_state.get(overall_scope_key):
+        return list(brand_skus), [
+            "SKU availability cannot be validated by retailer in this workspace; "
+            "showing the selected brand's overall-market SKUs."
+        ]
     selection = "|".join(sorted(retailer_ids))
-    cache_key = f"hypothesis_scope_skus:v2:{tenant}:{brand}:{selection}"
+    cache_key = f"hypothesis_scope_skus:v3:{tenant}:{brand}:{selection}"
     cached = st.session_state.get(cache_key)
     if isinstance(cached, dict):
         return cached["skus"], cached.get("warnings", [])
