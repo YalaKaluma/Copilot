@@ -76,7 +76,7 @@ st.markdown(
         border-right: 1px solid var(--sk-line);
     }
     [data-testid="stSidebar"] > div:first-child {
-        padding-top: 1.2rem;
+        padding-top: .35rem;
     }
     [data-testid="stSidebar"] h2 {
         color: var(--sk-ink);
@@ -112,6 +112,7 @@ st.markdown(
         align-items: center;
         gap: .7rem;
         min-height: 40px;
+        margin-top: 0;
     }
     .sk-mark {
         position: relative;
@@ -137,6 +138,26 @@ st.markdown(
         letter-spacing: -.025em;
     }
     .sk-brand-name span { color: var(--sk-magenta); }
+    .sk-connected-status {
+        position: fixed;
+        left: 1.45rem;
+        bottom: 1.45rem;
+        width: calc(21rem - 2.9rem);
+        box-sizing: border-box;
+        z-index: 1000;
+        color: #f2f7f6;
+        background: #203633;
+        border: 1px solid #29423f;
+        border-radius: 7px;
+        padding: 1rem;
+        font-size: .92rem;
+        font-weight: 600;
+    }
+    .sk-disconnected-status {
+        color: var(--sk-muted);
+        background: #17151c;
+        border-color: var(--sk-line);
+    }
     .sk-main-header {
         display: flex;
         align-items: center;
@@ -388,14 +409,13 @@ with st.sidebar:
         """,
         unsafe_allow_html=True,
     )
-    st.caption("PRICING WORKSPACE")
     navigation = [
-        ("⌂  Home", "Home"),
-        ("✦  Copilot", "Copilot"),
-        ("◇  Hypotheses", "Hypotheses"),
-        ("◎  Opportunities", "Opportunities"),
-        ("▤  Sell-in Stories", "Sell-in Stories"),
-        ("⚙  Connection", "Connection"),
+        ("Home", "Home"),
+        ("Copilot", "Copilot"),
+        ("Hypotheses", "Hypotheses"),
+        ("Opportunities", "Opportunities"),
+        ("Sell-in Stories", "Sell-in Stories"),
+        ("Connection", "Connection"),
     ]
     for label, destination in navigation:
         if st.button(
@@ -406,11 +426,17 @@ with st.sidebar:
         ):
             st.session_state.workspace_page = destination
             st.rerun()
-    st.divider()
     if st.session_state.get("skai_token"):
-        st.success(f"Connected · {(tenant_code or 'workspace').replace('_', ' ').title()}")
+        connected_workspace = (tenant_code or "workspace").replace("_", " ").title()
+        st.markdown(
+            f'<div class="sk-connected-status">Connected · {connected_workspace}</div>',
+            unsafe_allow_html=True,
+        )
     else:
-        st.caption("SKAI not connected")
+        st.markdown(
+            '<div class="sk-connected-status sk-disconnected-status">Not connected</div>',
+            unsafe_allow_html=True,
+        )
 
 page = st.session_state.workspace_page
 
@@ -535,9 +561,8 @@ st.markdown(
     <div class="sk-main-header">
       <div>
         <h1>Growth Copilot</h1>
-        <p>Ask a commercial question, inspect the plan, and run it on SKAI.</p>
+        <p>Ask a commercial question, inspect the plan, and run it on SK RGM AI.</p>
       </div>
-      <span class="sk-pill">Analytics prototype</span>
     </div>
     """,
     unsafe_allow_html=True,
