@@ -337,8 +337,10 @@ def render_hypotheses(agent, filter_values: dict) -> None:
     if not brands:
         st.error("SKAI did not return any brands for this workspace.")
         return
-    with st.container(border=True):
-        st.caption("ANALYSIS SCOPE")
+    with st.expander(
+        "Analysis scope",
+        expanded=not bool(st.session_state.generated_hypotheses),
+    ):
         lever = st.selectbox(
             "RGM lever",
             ["Pricing", "Promo", "Trade terms", "Mix"],
