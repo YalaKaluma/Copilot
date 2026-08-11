@@ -21,6 +21,20 @@ class SkaiAgent:
     model: str
 
     @staticmethod
+    def _records(payload: dict[str, Any]) -> list[dict[str, Any]]:
+        """Read records from production and demo API response envelopes."""
+        for key in ("rows", "data", "items", "results"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [row for row in value if isinstance(row, dict)]
+            if isinstance(value, dict):
+                for nested_key in ("rows", "data", "items", "results"):
+                    nested = value.get(nested_key)
+                    if isinstance(nested, list):
+                        return [row for row in nested if isinstance(row, dict)]
+        return []
+
+    @staticmethod
     def _has_usable_discount_depth(result: dict[str, Any]) -> bool:
         """Return whether the heatmap contains at least one real depth bracket."""
         summary = result.get("summary") or {}
@@ -253,7 +267,7 @@ class SkaiAgent:
                 def compact(value: dict[str, Any]) -> dict[str, Any]:
                     return {
                         "summary": value.get("summary"),
-                        "rows": (value.get("rows") or [])[:100],
+                        "rows": self._records(value)[:100],
                         "envelope": value.get("envelope"),
                     }
 
@@ -276,7 +290,7 @@ class SkaiAgent:
             else:
                 compact_result = {
                     "summary": result.get("summary"),
-                    "rows": (result.get("rows") or [])[:100],
+                    "rows": self._records(result)[:100],
                     "envelope": result.get("envelope"),
                 }
             guidance_file = "category_agent.md"
@@ -287,7 +301,7 @@ class SkaiAgent:
                     "results": {
                         key: {
                             "summary": value.get("summary"),
-                            "data": (value.get("data") or [])[:100],
+                            "data": self._records(value)[:100],
                             "envelope": value.get("envelope"),
                             "discount_depth_diagnostic": value.get(
                                 "discount_depth_diagnostic"
@@ -299,7 +313,7 @@ class SkaiAgent:
             else:
                 compact_result = {
                     "summary": result.get("summary"),
-                    "data": (result.get("data") or [])[:100],
+                    "data": self._records(result)[:100],
                     "envelope": result.get("envelope"),
                     "discount_depth_diagnostic": result.get(
                         "discount_depth_diagnostic"
@@ -316,10 +330,10 @@ class SkaiAgent:
                         "requested_price_change_pct"
                     ),
                     "requested_new_price": result.get("requested_new_price"),
-                    "base_data": (base.get("data") or [])[:100],
+                    "base_data": self._records(base)[:100],
                     "simulation": {
                         "kpis": simulation.get("kpis"),
-                        "data": (simulation.get("data") or [])[:100],
+                        "data": self._records(simulation)[:100],
                         "waterfall": simulation.get("waterfall"),
                     },
                 }
@@ -329,13 +343,13 @@ class SkaiAgent:
                     "analysis_mode": result["analysis_mode"],
                     "focus_brands": result.get("focus_brands") or [],
                     "summary": ladder.get("summary"),
-                    "data": (ladder.get("data") or [])[:100],
+                    "data": self._records(ladder)[:100],
                 }
             else:
                 compact_result = {
                     "summary": result.get("summary"),
                     "kpis": result.get("kpis"),
-                    "data": (result.get("data") or [])[:100],
+                    "data": self._records(result)[:100],
                     "waterfall": result.get("waterfall"),
                 }
             guidance_file = "pricing_agent.md"
