@@ -217,12 +217,54 @@ def _filter_options(filter_values: dict, *keys: str) -> list[str]:
     return []
 
 
+def _payload_rows(payload: dict) -> list[dict]:
+    """Read records from either production or demo pricing response envelopes."""
+    for key in ("rows", "data", "items", "results"):
+        value = payload.get(key)
+        if isinstance(value, list):
+            return [row for row in value if isinstance(row, dict)]
+        if isinstance(value, dict):
+            for nested_key in ("rows", "data", "items", "results"):
+                nested = value.get(nested_key)
+                if isinstance(nested, list):
+                    return [row for row in nested if isinstance(row, dict)]
+    return []
+
+
+def _curve_sku_ids(payload: dict) -> list[str]:
+    """Extract SKU IDs from grouped or flat Price Pack Curve records."""
+    sku_ids: list[str] = []
+    for row in _payload_rows(payload):
+        candidates: list[object] = []
+        if row.get("sku_id") is not None:
+            candidates.append(row["sku_id"])
+        if isinstance(row.get("sku_ids"), list):
+            candidates.extend(row["sku_ids"])
+        if isinstance(row.get("skus"), list):
+            candidates.extend(row["skus"])
+        for candidate in candidates:
+            if isinstance(candidate, dict):
+                resolved = next(
+                    (
+                        candidate.get(key)
+                        for key in ("sku_id", "id", "value", "code")
+                        if candidate.get(key) is not None
+                    ),
+                    None,
+                )
+            else:
+                resolved = candidate
+            if resolved is not None and str(resolved) not in sku_ids:
+                sku_ids.append(str(resolved))
+    return sku_ids
+
+
 def _brand_filter_hierarchy(
     agent, brand: str, catalog_retailers: list[str]
 ) -> tuple[list[str], list[str], list[str]]:
     """Derive valid brand children because SKAI's filter catalog is flat."""
     tenant = st.session_state.get("selected_tenant_code") or "default"
-    cache_key = f"hypothesis_filter_hierarchy:{tenant}:{brand}"
+    cache_key = f"hypothesis_filter_hierarchy:v2:{tenant}:{brand}"
     cached = st.session_state.get(cache_key)
     if isinstance(cached, dict):
         return cached["skus"], cached["retailers"], cached.get("warnings", [])
@@ -231,11 +273,7 @@ def _brand_filter_hierarchy(
     valid_skus: list[str] = []
     try:
         curve = agent.service.get_price_pack_curve(brands=[brand])
-        for row in curve.get("rows", []):
-            for sku in row.get("skus", []):
-                sku_id = sku.get("sku_id") if isinstance(sku, dict) else None
-                if sku_id and sku_id not in valid_skus:
-                    valid_skus.append(sku_id)
+        valid_skus = _curve_sku_ids(curve)
     except Exception as exc:
         warnings.append(f"Could not derive brand-specific SKUs: {exc}")
 
@@ -245,7 +283,7 @@ def _brand_filter_hierarchy(
         payload = agent.service.get_market_landscape(
             split_by="brand", brands=[brand], retailers=[retailer]
         )
-        return retailer, bool(payload.get("rows", []))
+        return retailer, bool(_payload_rows(payload))
 
     with ThreadPoolExecutor(max_workers=min(7, max(1, len(catalog_retailers)))) as pool:
         futures = {
@@ -283,7 +321,7 @@ def _scope_skus(
         return [], []
     tenant = st.session_state.get("selected_tenant_code") or "default"
     selection = "|".join(sorted(retailer_ids))
-    cache_key = f"hypothesis_scope_skus:{tenant}:{brand}:{selection}"
+    cache_key = f"hypothesis_scope_skus:v2:{tenant}:{brand}:{selection}"
     cached = st.session_state.get(cache_key)
     if isinstance(cached, dict):
         return cached["skus"], cached.get("warnings", [])
@@ -298,7 +336,7 @@ def _scope_skus(
             sku_ids=[sku_id],
             retailers=[retailer],
         )
-        return retailer, sku_id, bool(payload.get("rows", []))
+        return retailer, sku_id, bool(_payload_rows(payload))
 
     pair_count = len(retailer_ids) * len(brand_skus)
     with ThreadPoolExecutor(max_workers=min(14, max(1, pair_count))) as pool:
