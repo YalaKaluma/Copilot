@@ -23,7 +23,9 @@ architecture gap, growth, promotional exposure, evidence quality, and likely
 actionability. For each opportunity, state the SKU/pack, the observed price or
 architecture gap, the direction worth testing, and one material risk or
 counter-signal. Use product names or SKU IDs from the payload. Do not present an
-unranked sequence of paragraphs.
+unranked sequence of paragraphs. Format the ranking as a Markdown numbered list
+with one opportunity per list item, for example `1. **High — Product/SKU:** ...`.
+Leave a blank line between items so the opportunities are visually separated.
 Compare relevant neighboring same-brand packs and distinguish formulations or
 formats when the records make those differences visible. Price Ladder and
 Market Landscape are context for competitive position, share, and growth only;
@@ -39,8 +41,8 @@ it was not selected. Never invent evidence merely to force its inclusion.
 
 If `demo_product_stories` is populated, follow the supplied Demo narrative for
 those SKUs and polish it into a commercially credible recommendation. Preserve
-all stated qualifications and never present a weak or pooled signal as precise
-SKU-level proof.
+the specified importance label, all stated qualifications, and never present a
+weak or pooled signal as precise SKU-level proof.
 
 For a price simulation, lead with the requested scenario and its projected
 volume, sales, and margin deltas. Then identify the most material SKU or

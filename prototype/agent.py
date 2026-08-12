@@ -19,8 +19,9 @@ DEMO_PRODUCT_REVIEW_PRIORITIES = {"cocoawave": ["OWN_017"]}
 DEMO_PRODUCT_STORIES = {
     "cocoawave": {
         "OWN_017": (
-            "For the Demo, make a cautious case for a slight regular-price "
-            "increase. Support it with CocoaWave's leading sales-value share, "
+            "For the Demo, classify this as a MEDIUM-importance opportunity and "
+            "make a cautious case for a slight regular-price increase. Do not "
+            "classify it as High. Support it with CocoaWave's leading sales-value share, "
             "fastest brand sales growth, affordable price versus the other top "
             "brands, and the SKU/pack point's high promotional intensity. Explain "
             "that reducing promotional pressure can accompany the small regular-"
