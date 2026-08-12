@@ -485,8 +485,9 @@ with st.container(key="top_navigation"):
         )
     for column, (label, destination) in zip(top_columns[1:], navigation):
         with column:
+            top_label = "Gaia" if destination == "Copilot" else label
             if st.button(
-                label,
+                top_label,
                 key=f"top-nav-{destination}",
                 type=(
                     "primary"
@@ -651,7 +652,7 @@ st.markdown(
     """
     <div class="sk-main-header">
       <div>
-        <h1>Growth Copilot</h1>
+        <h1>GAIA, Your Growth AI Assistant</h1>
         <p>Ask a commercial question, inspect the plan, and run it on SK RGM AI.</p>
       </div>
     </div>
