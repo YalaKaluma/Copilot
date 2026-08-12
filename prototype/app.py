@@ -64,8 +64,15 @@ st.markdown(
             var(--sk-canvas);
         color: var(--sk-ink);
     }
-    [data-testid="stHeader"] { background: rgba(5, 5, 6, .92); }
-    [data-testid="stToolbar"] { right: 1rem; }
+    [data-testid="stHeader"] {
+        background: transparent;
+        pointer-events: none;
+    }
+    [data-testid="stToolbar"] {
+        right: 1rem;
+        z-index: 100002;
+        pointer-events: auto;
+    }
     [data-testid="stMainBlockContainer"] {
         max-width: 1180px;
         padding-top: 5.4rem;
@@ -76,7 +83,7 @@ st.markdown(
         top: 0;
         left: 0;
         right: 0;
-        z-index: 99990;
+        z-index: 100000;
         min-height: 3.8rem;
         padding: .45rem 5.5rem .35rem 1rem;
         background: #0e0d12;
@@ -110,7 +117,10 @@ st.markdown(
         gap: .55rem;
         min-height: 2.5rem;
         white-space: nowrap;
+        opacity: 1 !important;
     }
+    .sk-top-brand .sk-mark i { opacity: 1 !important; }
+    .sk-top-brand .sk-brand-name { opacity: 1 !important; }
     .sk-top-brand .sk-mark { transform: scale(.82); }
     .sk-top-brand .sk-brand-name { font-size: 1rem; }
     [data-testid="stSidebar"] {

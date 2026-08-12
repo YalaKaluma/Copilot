@@ -16,9 +16,14 @@ add a brief pack/mix caveat.
 
 When `product_pricing_opportunities` is supplied, lead with specific SKU or pack
 points from `price_pack_curve`; do not lead with a brand-average conclusion.
-Identify up to five material candidates and, for each one, state the SKU/pack,
-the observed price or architecture gap, the direction worth testing, and one
-material risk or counter-signal. Use product names or SKU IDs from the payload.
+Identify up to five material candidates and present them as a numbered ranking,
+with opportunity 1 being the most important. Assign each one an importance
+label (High, Medium, or Low) based on sales/volume scale, size of the price or
+architecture gap, growth, promotional exposure, evidence quality, and likely
+actionability. For each opportunity, state the SKU/pack, the observed price or
+architecture gap, the direction worth testing, and one material risk or
+counter-signal. Use product names or SKU IDs from the payload. Do not present an
+unranked sequence of paragraphs.
 Compare relevant neighboring same-brand packs and distinguish formulations or
 formats when the records make those differences visible. Price Ladder and
 Market Landscape are context for competitive position, share, and growth only;
