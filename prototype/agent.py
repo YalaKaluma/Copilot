@@ -13,6 +13,10 @@ from skai_service import SkaiGrowthService
 
 GUIDANCE_DIR = Path(__file__).with_name("guidance")
 
+# Curated SKU checks used in the Demo workspace so showcase questions remain
+# reproducible while the answer is still grounded in the live API evidence.
+DEMO_PRODUCT_REVIEW_PRIORITIES = {"cocoawave": ["OWN_017"]}
+
 
 @dataclass
 class SkaiAgent:
@@ -347,9 +351,18 @@ class SkaiAgent:
                 curve = result.get("price_pack_curve") or {}
                 ladder = result.get("price_ladder") or {}
                 landscape = result.get("market_landscape") or {}
+                focus_brands = result.get("focus_brands") or []
+                required_sku_review = [
+                    sku_id
+                    for brand in focus_brands
+                    for sku_id in DEMO_PRODUCT_REVIEW_PRIORITIES.get(
+                        str(brand).casefold(), []
+                    )
+                ]
                 compact_result = {
                     "analysis_mode": result["analysis_mode"],
-                    "focus_brands": result.get("focus_brands") or [],
+                    "focus_brands": focus_brands,
+                    "required_sku_review": required_sku_review,
                     "price_pack_curve": {
                         "summary": curve.get("summary"),
                         "rows": self._records(curve)[:150],

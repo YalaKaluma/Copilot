@@ -26,6 +26,12 @@ they cannot substitute for SKU-level evidence. If no defensible SKU candidate
 exists, explain which product-level fields are missing rather than reverting to
 a generic brand recommendation.
 
+If `required_sku_review` is populated, explicitly assess every listed SKU in
+addition to the strongest candidates found in the data. Include the SKU among
+the opportunities when its evidence supports an action. If it is not a credible
+opportunity, still mention it briefly as reviewed and state the decisive reason
+it was not selected. Never invent evidence merely to force its inclusion.
+
 For a price simulation, lead with the requested scenario and its projected
 volume, sales, and margin deltas. Then identify the most material SKU or
 retailer contributors and state the elasticity mode when available. Clearly
