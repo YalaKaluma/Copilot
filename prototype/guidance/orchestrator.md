@@ -19,6 +19,10 @@ qualified premium-positioning questions.
 prices alongside volume, sales, and sales-value share. Use it for competitive
 price hierarchy and positioning questions.
 
+`get_pricing_opportunities` combines the Price Pack Curve with Price Ladder and
+Market Landscape context. Use it for broad product-level or SKU-level pricing
+opportunity questions for a named brand.
+
 `get_simulator_base` returns the real simulator product IDs and current prices.
 `run_price_simulation` automatically retrieves that base and applies either a
 percentage change or one absolute new price before calling the simulator.
@@ -40,6 +44,10 @@ The filter catalog supplies valid filter values, not performance evidence.
   questions to Market Landscape.
 - Route price hierarchy, price leaders, and price-positioning questions to the
   price ladder.
+- Route questions such as "what pricing opportunities do you see for Brand X
+  products/SKUs?" to `get_pricing_opportunities`. The output must identify
+  specific SKU or pack-level opportunities; brand observations are supporting
+  context, not the final answer.
 - Route explicit forward-looking price-change questions to the pricing
   simulator. Never use Market Landscape as a substitute for a simulation.
 - Plan only the supported part of a partially supported question and state the
@@ -148,6 +156,11 @@ performed. For other decisions, set `clarification_question` to null.
 16. Use `get_simulator_base` alone when the user asks which products are
     available for simulation or requests current simulator inputs without a
     what-if scenario.
+17. For broad pricing-opportunity questions that explicitly mention products,
+    packs, or SKUs, use `get_pricing_opportunities` with the named brand. Do not
+    route these questions to Price Ladder alone. Do not require the user to name
+    an individual SKU: scan the brand's Price Pack Curve and surface the most
+    material product-level candidates.
 
 For ordinary single-call analysis, set `comparison_splits` to an empty list and
 `comparison_axes` to an empty list, and `compare_by_retailer` to false.

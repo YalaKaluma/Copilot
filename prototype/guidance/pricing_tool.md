@@ -13,6 +13,11 @@ for architecture gaps, trade-up coherence, competitive clustering, and outlier
 SKUs. The endpoint does not currently accept a retailer filter; do not describe
 its evidence as retailer-specific.
 
+`get_pricing_opportunities` is the product-level discovery workflow. It uses
+Price Pack Curve as the primary evidence and adds Price Ladder and Market
+Landscape only as brand-level context. Use it when the user asks for pricing
+opportunities across a brand's products, packs, or SKUs.
+
 `get_simulator_base` calls `GET /api/v1/pricing/simulator/base`. Use it to inspect
 available simulator products and current prices.
 

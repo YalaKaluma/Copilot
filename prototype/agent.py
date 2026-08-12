@@ -124,6 +124,28 @@ class SkaiAgent:
                     "ladder": ladder,
                 }
             return ladder
+        if tool == "get_pricing_opportunities":
+            allowed = {"brands", "sku_ids", "pack_size_range_values"}
+            opportunity_arguments = {
+                key: value for key, value in arguments.items() if key in allowed
+            }
+            focus_brands = opportunity_arguments.get("brands") or []
+            if not focus_brands:
+                raise ValueError(
+                    "A brand is required for product-level pricing opportunities."
+                )
+            curve = self.skai.get_price_pack_curve(**opportunity_arguments)
+            ladder = self.skai.get_price_ladder()
+            landscape = self.skai.get_market_landscape(
+                split_by="brand", brands=focus_brands
+            )
+            return {
+                "analysis_mode": "product_pricing_opportunities",
+                "focus_brands": focus_brands,
+                "price_pack_curve": curve,
+                "price_ladder": ladder,
+                "market_landscape": landscape,
+            }
         if tool == "get_simulator_base":
             allowed = {
                 "brands", "categories", "subcategories", "retailers", "sku_ids",
@@ -321,7 +343,27 @@ class SkaiAgent:
                 }
             guidance_file = "promo_agent.md"
         else:
-            if result.get("analysis_mode") == "price_simulation":
+            if result.get("analysis_mode") == "product_pricing_opportunities":
+                curve = result.get("price_pack_curve") or {}
+                ladder = result.get("price_ladder") or {}
+                landscape = result.get("market_landscape") or {}
+                compact_result = {
+                    "analysis_mode": result["analysis_mode"],
+                    "focus_brands": result.get("focus_brands") or [],
+                    "price_pack_curve": {
+                        "summary": curve.get("summary"),
+                        "rows": self._records(curve)[:150],
+                    },
+                    "price_ladder_brand_context": {
+                        "summary": ladder.get("summary"),
+                        "rows": self._records(ladder)[:100],
+                    },
+                    "market_landscape_brand_context": {
+                        "summary": landscape.get("summary"),
+                        "rows": self._records(landscape)[:100],
+                    },
+                }
+            elif result.get("analysis_mode") == "price_simulation":
                 simulation = result.get("simulation") or {}
                 base = result.get("base") or {}
                 compact_result = {

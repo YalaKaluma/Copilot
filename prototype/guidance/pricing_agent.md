@@ -14,6 +14,18 @@ rank. Do not say positioning is unavailable merely because normalized
 price-per-weight is absent; clearly label the ladder basis as average price and
 add a brief pack/mix caveat.
 
+When `product_pricing_opportunities` is supplied, lead with specific SKU or pack
+points from `price_pack_curve`; do not lead with a brand-average conclusion.
+Identify up to five material candidates and, for each one, state the SKU/pack,
+the observed price or architecture gap, the direction worth testing, and one
+material risk or counter-signal. Use product names or SKU IDs from the payload.
+Compare relevant neighboring same-brand packs and distinguish formulations or
+formats when the records make those differences visible. Price Ladder and
+Market Landscape are context for competitive position, share, and growth only;
+they cannot substitute for SKU-level evidence. If no defensible SKU candidate
+exists, explain which product-level fields are missing rather than reverting to
+a generic brand recommendation.
+
 For a price simulation, lead with the requested scenario and its projected
 volume, sales, and margin deltas. Then identify the most material SKU or
 retailer contributors and state the elasticity mode when available. Clearly

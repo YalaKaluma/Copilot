@@ -50,6 +50,7 @@ PLAN_SCHEMA = {
                 "get_promo_heatmap",
                 "get_market_landscape",
                 "get_price_ladder",
+                "get_pricing_opportunities",
                 "get_simulator_base",
                 "run_price_simulation",
             ],
