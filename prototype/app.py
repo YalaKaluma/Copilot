@@ -38,7 +38,7 @@ st.set_page_config(
     page_title="SKAI Growth Copilot",
     page_icon="◆",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 st.markdown(
@@ -68,9 +68,51 @@ st.markdown(
     [data-testid="stToolbar"] { right: 1rem; }
     [data-testid="stMainBlockContainer"] {
         max-width: 1180px;
-        padding-top: 2.2rem;
+        padding-top: 5.4rem;
         padding-bottom: 6rem;
     }
+    .st-key-top_navigation {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 99990;
+        min-height: 3.8rem;
+        padding: .45rem 5.5rem .35rem 1rem;
+        background: #0e0d12;
+        border-bottom: 1px solid var(--sk-line);
+        box-shadow: 0 5px 18px rgba(0, 0, 0, .25);
+    }
+    .st-key-top_navigation [data-testid="stHorizontalBlock"] {
+        align-items: center;
+        gap: .25rem;
+    }
+    .st-key-top_navigation .stButton > button {
+        min-height: 2.35rem;
+        color: var(--sk-muted);
+        background: transparent;
+        border: 0;
+        border-radius: 999px;
+        box-shadow: none;
+        white-space: nowrap;
+    }
+    .st-key-top_navigation .stButton > button:hover {
+        color: #fff;
+        background: #25222b;
+    }
+    .st-key-top_navigation .stButton > button[kind="primary"] {
+        color: #fff;
+        background: var(--sk-teal);
+    }
+    .sk-top-brand {
+        display: flex;
+        align-items: center;
+        gap: .55rem;
+        min-height: 2.5rem;
+        white-space: nowrap;
+    }
+    .sk-top-brand .sk-mark { transform: scale(.82); }
+    .sk-top-brand .sk-brand-name { font-size: 1rem; }
     [data-testid="stSidebar"] {
         background: #0e0d12;
         border-right: 1px solid var(--sk-line);
@@ -343,7 +385,8 @@ st.markdown(
     hr { border-color: var(--sk-line); }
     @media (max-width: 760px) {
         .sk-pill { display: none; }
-        [data-testid="stMainBlockContainer"] { padding-top: 1.2rem; }
+        [data-testid="stMainBlockContainer"] { padding-top: 5rem; }
+        .st-key-top_navigation { overflow-x: auto; padding-right: 1rem; }
     }
     </style>
     """,
@@ -409,6 +452,42 @@ if tenant_codes:
 else:
     tenant_code = None
 
+navigation = [
+    ("Home", "Home"),
+    ("Copilot", "Copilot"),
+    ("Hypotheses", "Hypotheses"),
+    ("Opportunities", "Opportunities"),
+    ("Sell-in Stories", "Sell-in Stories"),
+    ("Connection", "Connection"),
+]
+
+with st.container(key="top_navigation"):
+    top_columns = st.columns([1.45, 1, 1, 1.2, 1.35, 1.25, 1.05])
+    with top_columns[0]:
+        st.markdown(
+            """
+            <div class="sk-top-brand">
+              <span class="sk-mark"><i></i><i></i><i></i></span>
+              <span class="sk-brand-name">SK RGM <span>AI</span></span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    for column, (label, destination) in zip(top_columns[1:], navigation):
+        with column:
+            if st.button(
+                label,
+                key=f"top-nav-{destination}",
+                type=(
+                    "primary"
+                    if st.session_state.workspace_page == destination
+                    else "secondary"
+                ),
+                use_container_width=True,
+            ):
+                st.session_state.workspace_page = destination
+                st.rerun()
+
 with st.sidebar:
     st.markdown(
         """
@@ -419,14 +498,6 @@ with st.sidebar:
         """,
         unsafe_allow_html=True,
     )
-    navigation = [
-        ("Home", "Home"),
-        ("Copilot", "Copilot"),
-        ("Hypotheses", "Hypotheses"),
-        ("Opportunities", "Opportunities"),
-        ("Sell-in Stories", "Sell-in Stories"),
-        ("Connection", "Connection"),
-    ]
     for label, destination in navigation:
         if st.button(
             label,

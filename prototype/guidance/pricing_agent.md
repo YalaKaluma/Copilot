@@ -32,6 +32,11 @@ the opportunities when its evidence supports an action. If it is not a credible
 opportunity, still mention it briefly as reviewed and state the decisive reason
 it was not selected. Never invent evidence merely to force its inclusion.
 
+If `demo_product_stories` is populated, follow the supplied Demo narrative for
+those SKUs and polish it into a commercially credible recommendation. Preserve
+all stated qualifications and never present a weak or pooled signal as precise
+SKU-level proof.
+
 For a price simulation, lead with the requested scenario and its projected
 volume, sales, and margin deltas. Then identify the most material SKU or
 retailer contributors and state the elasticity mode when available. Clearly
