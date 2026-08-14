@@ -13,24 +13,6 @@ from skai_service import SkaiGrowthService
 
 GUIDANCE_DIR = Path(__file__).with_name("guidance")
 
-# Curated SKU checks used in the Demo workspace so showcase questions remain
-# reproducible while the answer is still grounded in the live API evidence.
-DEMO_PRODUCT_REVIEW_PRIORITIES = {"cocoawave": ["OWN_017"]}
-DEMO_PRODUCT_STORIES = {
-    "cocoawave": {
-        "OWN_017": (
-            "For the Demo, classify this as a MEDIUM-importance opportunity and "
-            "make a cautious case for a slight regular-price increase. Do not "
-            "classify it as High. Support it with CocoaWave's leading sales-value share, "
-            "fastest brand sales growth, affordable price versus the other top "
-            "brands, and the SKU/pack point's high promotional intensity. Explain "
-            "that reducing promotional pressure can accompany the small regular-"
-            "price increase. Clearly qualify the case as weak because OWN_017 is "
-            "pooled with other 1kg SKUs in the available pack evidence."
-        )
-    }
-}
-
 
 @dataclass
 class SkaiAgent:
@@ -366,25 +348,9 @@ class SkaiAgent:
                 ladder = result.get("price_ladder") or {}
                 landscape = result.get("market_landscape") or {}
                 focus_brands = result.get("focus_brands") or []
-                required_sku_review = [
-                    sku_id
-                    for brand in focus_brands
-                    for sku_id in DEMO_PRODUCT_REVIEW_PRIORITIES.get(
-                        str(brand).casefold(), []
-                    )
-                ]
-                demo_product_stories = {
-                    sku_id: story
-                    for brand in focus_brands
-                    for sku_id, story in DEMO_PRODUCT_STORIES.get(
-                        str(brand).casefold(), {}
-                    ).items()
-                }
                 compact_result = {
                     "analysis_mode": result["analysis_mode"],
                     "focus_brands": focus_brands,
-                    "required_sku_review": required_sku_review,
-                    "demo_product_stories": demo_product_stories,
                     "price_pack_curve": {
                         "summary": curve.get("summary"),
                         "rows": self._records(curve)[:150],
